@@ -162,8 +162,8 @@ func TestAnalysisResultRepository_Upsert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if string(got.Payload) != string(payload) {
-		t.Fatalf("payload = %s", got.Payload)
+	if !jsonEqual(got.Payload, payload) {
+		t.Fatalf("payload = %s, want %s", got.Payload, payload)
 	}
 
 	res.Cached = true
@@ -207,6 +207,19 @@ func TestLedgerRepository_InsertList(t *testing.T) {
 	if entries[0].Delta != -1 {
 		t.Fatalf("expected newest first, got %+v", entries)
 	}
+}
+
+func jsonEqual(a, b []byte) bool {
+	var va, vb any
+	if err := json.Unmarshal(a, &va); err != nil {
+		return false
+	}
+	if err := json.Unmarshal(b, &vb); err != nil {
+		return false
+	}
+	ab, _ := json.Marshal(va)
+	bb, _ := json.Marshal(vb)
+	return string(ab) == string(bb)
 }
 
 func TestUserRepository_NotFound(t *testing.T) {
