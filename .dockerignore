@@ -1,0 +1,14 @@
+.git
+.github
+.cursor
+.docs
+**/*.md
+**/*_test.go
+.env
+.env.*
+.DS_Store
+.idea
+.vscode
+bin
+*.test
+coverage.out
