@@ -15,6 +15,22 @@ jobs:
   test:
     name: go test
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: easyterms
+          POSTGRES_PASSWORD: easyterms
+          POSTGRES_DB: easyterms
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://easyterms:easyterms@localhost:5432/easyterms?sslmode=disable
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,8 +41,14 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Run tests
+      - name: Apply migrations
+        run: go run ./cmd/migrate -direction up
+
+      - name: Run unit tests
         run: go test ./...
+
+      - name: Run integration tests
+        run: go test -tags=integration ./internal/storage/postgres/...
 
   docker:
     name: docker build
