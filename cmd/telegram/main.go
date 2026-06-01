@@ -51,6 +51,12 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("llm: %w", err)
 	}
+	log.Info("llm configured",
+		slog.String("provider", os.Getenv("LLM_PROVIDER")),
+		slog.String("base_url", os.Getenv("LLM_BASE_URL")),
+		slog.String("model", os.Getenv("LLM_MODEL")),
+		slog.String("json_mode", os.Getenv("LLM_JSON_MODE")),
+	)
 
 	store, err := postgres.NewStore(ctx, cfg.DatabaseURL)
 	if err != nil {

@@ -4,6 +4,7 @@ package document
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
@@ -12,6 +13,9 @@ import (
 	"github.com/tikhomirovv/easyterms/internal/core/ports"
 	"github.com/tikhomirovv/easyterms/internal/ingest/urlfetch"
 )
+
+// maxIngestChars limits LLM input size (local models often have smaller context windows).
+const maxIngestChars = 100_000
 
 // Billing gates and records check consumption.
 type Billing interface {
@@ -169,10 +173,31 @@ func (s *Service) Ingest(ctx context.Context, userID, documentID uuid.UUID) (*do
 
 	extractReq, err := s.buildExtractRequest(ctx, srcs, user.Locale, doc.ID.String())
 	if err != nil {
+		slog.Warn("ingest: build extract request failed",
+			slog.String("document_id", doc.ID.String()),
+			slog.String("error", err.Error()),
+		)
 		return nil, err
 	}
+	extractReq.RawText = truncateForLLM(extractReq.RawText)
+	if strings.TrimSpace(extractReq.RawText) == "" {
+		slog.Warn("ingest: empty content after fetch",
+			slog.String("document_id", doc.ID.String()),
+			slog.Int("sources", len(srcs)),
+		)
+		return nil, fmt.Errorf("ingest: no text content from sources")
+	}
+
+	slog.Info("ingest: calling llm",
+		slog.String("document_id", doc.ID.String()),
+		slog.Int("input_chars", len(extractReq.RawText)),
+	)
 	resp, err := s.llm.ExtractCleanText(ctx, extractReq)
 	if err != nil {
+		slog.Warn("ingest: llm extract failed",
+			slog.String("document_id", doc.ID.String()),
+			slog.String("error", err.Error()),
+		)
 		return nil, fmt.Errorf("ingest llm: %w", err)
 	}
 
@@ -256,11 +281,24 @@ func (s *Service) buildExtractRequest(ctx context.Context, srcs []domain.Documen
 			parts = append(parts, pageText)
 		}
 	}
+	raw := strings.Join(parts, "\n\n")
+	slog.Info("ingest: sources prepared",
+		slog.String("document_id", documentID),
+		slog.Int("parts", len(parts)),
+		slog.Int("raw_chars", len(raw)),
+	)
 	return ports.ExtractRequest{
 		Locale:     locale,
 		DocumentID: documentID,
-		RawText:    strings.Join(parts, "\n\n"),
+		RawText:    raw,
 	}, nil
+}
+
+func truncateForLLM(s string) string {
+	if len(s) <= maxIngestChars {
+		return s
+	}
+	return s[:maxIngestChars] + "\n\n[truncated for model context limit]"
 }
 
 func assembleOriginalText(srcs []domain.DocumentSource) string {

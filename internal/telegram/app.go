@@ -95,6 +95,23 @@ func isURL(text string) bool {
 	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
 }
 
+// normalizeInputURL adds https:// when the user pastes a host/path without a scheme.
+func normalizeInputURL(text string) string {
+	text = strings.TrimSpace(text)
+	if isURL(text) {
+		return text
+	}
+	if strings.Contains(text, " ") {
+		return text
+	}
+	candidate := "https://" + strings.TrimPrefix(text, "//")
+	u, err := url.Parse(candidate)
+	if err != nil || u.Host == "" || !strings.Contains(u.Host, ".") {
+		return text
+	}
+	return candidate
+}
+
 func formatPlainPayload(payload []byte) string {
 	var v struct {
 		Summary string `json:"summary"`
@@ -138,6 +155,8 @@ func userFacingErr(locale string, err error) string {
 	case strings.Contains(msg, "fetch url"):
 		return i18n.T(locale, "err_url_fetch")
 	case strings.Contains(msg, "ingest llm"):
+		return i18n.T(locale, "err_ingest_failed")
+	case strings.Contains(msg, "ingest: no text"):
 		return i18n.T(locale, "err_ingest_failed")
 	default:
 		return i18n.T(locale, "error_generic")
