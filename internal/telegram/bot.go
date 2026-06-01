@@ -20,12 +20,14 @@ func Run(ctx context.Context, token string, app *App) error {
 
 	tb.RegisterHandler(bot.HandlerTypeMessageText, "/start", bot.MatchTypeExact, app.wrap(app.handleStart))
 	tb.RegisterHandler(bot.HandlerTypeMessageText, "/new", bot.MatchTypeExact, app.wrap(app.handleNewDoc))
+	tb.RegisterHandler(bot.HandlerTypeMessageText, "/demo", bot.MatchTypeExact, app.wrap(app.handleDemo))
 	tb.RegisterHandler(bot.HandlerTypeCallbackQueryData, cbNewDoc, bot.MatchTypeExact, app.wrap(app.handleNewDoc))
 	tb.RegisterHandler(bot.HandlerTypeCallbackQueryData, cbReadyIngest, bot.MatchTypeExact, app.wrap(app.handleReady))
 	tb.RegisterHandler(bot.HandlerTypeCallbackQueryData, cbAnalyzePlain, bot.MatchTypeExact, app.wrap(app.handleAnalyzePlain))
 	tb.RegisterHandler(bot.HandlerTypeCallbackQueryData, cbAnalyzeHigh, bot.MatchTypeExact, app.wrap(app.handleAnalyzeHighlights))
 	tb.RegisterHandler(bot.HandlerTypeCallbackQueryData, cbBalance, bot.MatchTypeExact, app.wrap(app.handleBalance))
 	tb.RegisterHandler(bot.HandlerTypeCallbackQueryData, cbBuy, bot.MatchTypeExact, app.wrap(app.handleBuy))
+	tb.RegisterHandler(bot.HandlerTypeCallbackQueryData, cbDemo, bot.MatchTypeExact, app.wrap(app.handleDemo))
 	tb.RegisterHandler(bot.HandlerTypeCallbackQueryData, cbBuyPkg1, bot.MatchTypeExact, app.wrap(app.handleBuyPkg1))
 	tb.RegisterHandler(bot.HandlerTypeCallbackQueryData, cbBuyPkg3, bot.MatchTypeExact, app.wrap(app.handleBuyPkg3))
 	tb.RegisterHandler(bot.HandlerTypeCallbackQueryData, cbBuyPkg10, bot.MatchTypeExact, app.wrap(app.handleBuyPkg10))
@@ -56,7 +58,12 @@ func (a *App) handleStart(ctx context.Context, b *bot.Bot, update *models.Update
 	if err != nil {
 		return err
 	}
-	return a.reply(ctx, b, update, i18n.T(locale, "welcome"), mainMenuKeyboard(locale))
+	return a.reply(ctx, b, update, withDisclaimer(locale, i18n.T(locale, "welcome")), mainMenuKeyboard(locale))
+}
+
+func (a *App) handleDemo(ctx context.Context, b *bot.Bot, update *models.Update) error {
+	locale := a.locale(update)
+	return a.reply(ctx, b, update, withDisclaimer(locale, i18n.T(locale, "demo")), mainMenuKeyboard(locale))
 }
 
 func (a *App) handleNewDoc(ctx context.Context, b *bot.Bot, update *models.Update) error {
@@ -108,7 +115,7 @@ func (a *App) handleReady(ctx context.Context, b *bot.Bot, update *models.Update
 	if err != nil {
 		return a.reply(ctx, b, update, userFacingErr(locale, err), draftKeyboard(locale))
 	}
-	return a.reply(ctx, b, update, i18n.T(locale, "ingest_ok"), ingestedKeyboard(locale))
+	return a.reply(ctx, b, update, withDisclaimer(locale, i18n.T(locale, "ingest_ok")), ingestedKeyboard(locale))
 }
 
 func (a *App) handleAnalyzePlain(ctx context.Context, b *bot.Bot, update *models.Update) error {
@@ -144,7 +151,7 @@ func (a *App) runAnalysis(
 		body = body[:3500] + "…"
 	}
 	text := fmt.Sprintf(i18n.T(locale, msgKey), body)
-	return a.reply(ctx, b, update, text, ingestedKeyboard(locale))
+	return a.reply(ctx, b, update, withDisclaimer(locale, text), ingestedKeyboard(locale))
 }
 
 func (a *App) handleBalance(ctx context.Context, b *bot.Bot, update *models.Update) error {
