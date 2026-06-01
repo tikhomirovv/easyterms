@@ -22,6 +22,13 @@ func (r *ledgerRepo) Insert(ctx context.Context, entry *domain.LedgerEntry) erro
 	).Scan(&entry.ID, &entry.CreatedAt)
 }
 
+func (r *ledgerRepo) ExistsByReason(ctx context.Context, userID uuid.UUID, reason string) (bool, error) {
+	const q = `SELECT EXISTS(SELECT 1 FROM check_ledger WHERE user_id = $1 AND reason = $2)`
+	var exists bool
+	err := r.pool.QueryRow(ctx, q, userID, reason).Scan(&exists)
+	return exists, err
+}
+
 func (r *ledgerRepo) ListByUser(ctx context.Context, userID uuid.UUID, limit int) ([]domain.LedgerEntry, error) {
 	const q = `
 		SELECT id, user_id, document_id, purchase_id, delta, reason, created_at

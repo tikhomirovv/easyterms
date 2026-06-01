@@ -122,6 +122,46 @@ func (r *memLedger) Insert(ctx context.Context, e *domain.LedgerEntry) error {
 func (r *memLedger) ListByUser(ctx context.Context, userID uuid.UUID, limit int) ([]domain.LedgerEntry, error) {
 	return nil, nil
 }
+func (r *memLedger) ExistsByReason(_ context.Context, userID uuid.UUID, reason string) (bool, error) {
+	for _, e := range r.m.ledger {
+		if e.UserID == userID && e.Reason == reason {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+type memBilling struct {
+	users  *memUsers
+	ledger *memLedger
+}
+
+func (b *memBilling) HasChecks(ctx context.Context, userID uuid.UUID) (bool, error) {
+	u, err := b.users.GetByID(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	return u.CheckBalance > 0, nil
+}
+func (b *memBilling) ConsumeCheck(ctx context.Context, userID, documentID uuid.UUID) error {
+	reason := "document_ingest:" + documentID.String()
+	ok, _ := b.ledger.ExistsByReason(ctx, userID, reason)
+	if ok {
+		return nil
+	}
+	u, err := b.users.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if u.CheckBalance < 1 {
+		return core.ErrInsufficientBalance
+	}
+	u.CheckBalance--
+	_ = b.users.Update(ctx, u)
+	return b.ledger.Insert(ctx, &domain.LedgerEntry{
+		UserID: userID, DocumentID: &documentID, Delta: -1, Reason: reason,
+	})
+}
 
 func TestDocumentService_ingestConsumesCheckOnce(t *testing.T) {
 	ctx := context.Background()
@@ -136,7 +176,8 @@ func TestDocumentService_ingestConsumesCheckOnce(t *testing.T) {
 			return ports.ExtractResponse{CleanText: "Clean agreement text."}, nil
 		},
 	}
-	svc := document.NewService(mem.userRepo(), mem.docRepo(), mem.sourceRepo(), mem.ledgerRepo(), llm)
+	bill := &memBilling{users: &memUsers{mem}, ledger: &memLedger{mem}}
+	svc := document.NewService(mem.userRepo(), mem.docRepo(), mem.sourceRepo(), bill, llm)
 
 	doc, err := svc.CreateDocument(ctx, user.ID)
 	if err != nil {
@@ -161,7 +202,7 @@ func TestDocumentService_ingestConsumesCheckOnce(t *testing.T) {
 	if u.CheckBalance != 0 {
 		t.Fatalf("balance = %d", u.CheckBalance)
 	}
-	if len(mem.ledger) != 1 || mem.ledger[0].Delta != -1 {
+	if len(mem.ledger) != 1 || mem.ledger[0].Delta != -1 || mem.ledger[0].Reason == "" {
 		t.Fatalf("ledger = %+v", mem.ledger)
 	}
 
@@ -181,7 +222,8 @@ func TestDocumentService_insufficientBalance(t *testing.T) {
 	user := &domain.User{TelegramID: 2, Locale: "en", CheckBalance: 0}
 	_ = mem.userRepo().Create(ctx, user)
 
-	svc := document.NewService(mem.userRepo(), mem.docRepo(), mem.sourceRepo(), mem.ledgerRepo(), &mockLLM{
+	bill := &memBilling{users: &memUsers{mem}, ledger: &memLedger{mem}}
+	svc := document.NewService(mem.userRepo(), mem.docRepo(), mem.sourceRepo(), bill, &mockLLM{
 		extract: func(ctx context.Context, req ports.ExtractRequest) (ports.ExtractResponse, error) {
 			return ports.ExtractResponse{CleanText: "x"}, nil
 		},
@@ -200,7 +242,8 @@ func TestDocumentService_listHistory(t *testing.T) {
 	mem := newMemStore()
 	user := &domain.User{TelegramID: 3, Locale: "ru", CheckBalance: 5}
 	_ = mem.userRepo().Create(ctx, user)
-	svc := document.NewService(mem.userRepo(), mem.docRepo(), mem.sourceRepo(), mem.ledgerRepo(), &mockLLM{})
+	bill := &memBilling{users: &memUsers{mem}, ledger: &memLedger{mem}}
+	svc := document.NewService(mem.userRepo(), mem.docRepo(), mem.sourceRepo(), bill, &mockLLM{})
 
 	_, _ = svc.CreateDocument(ctx, user.ID)
 	_, _ = svc.CreateDocument(ctx, user.ID)
