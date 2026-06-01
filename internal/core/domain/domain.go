@@ -51,6 +51,26 @@ type AnalysisResult struct {
 	CreatedAt    time.Time
 }
 
+// SourceKind is the type of document input fragment.
+type SourceKind string
+
+const (
+	SourceKindText  SourceKind = "text"
+	SourceKindURL   SourceKind = "url"
+	SourceKindImage SourceKind = "image"
+)
+
+// DocumentSource is one piece of input attached to a document.
+type DocumentSource struct {
+	ID         uuid.UUID
+	DocumentID uuid.UUID
+	Kind       SourceKind
+	Content    *string
+	SourceURL  *string
+	Sequence   int
+	CreatedAt  time.Time
+}
+
 // LedgerEntry records a check balance change.
 type LedgerEntry struct {
 	ID         uuid.UUID

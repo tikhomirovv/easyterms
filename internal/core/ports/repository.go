@@ -19,6 +19,12 @@ type UserRepository interface {
 	Update(ctx context.Context, user *domain.User) error
 }
 
+// DocumentSourceRepository persists document input fragments.
+type DocumentSourceRepository interface {
+	Create(ctx context.Context, source *domain.DocumentSource) error
+	ListByDocument(ctx context.Context, documentID uuid.UUID) ([]domain.DocumentSource, error)
+}
+
 // DocumentRepository persists documents.
 type DocumentRepository interface {
 	Create(ctx context.Context, doc *domain.Document) error
