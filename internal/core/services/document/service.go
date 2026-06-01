@@ -10,6 +10,7 @@ import (
 	"github.com/tikhomirovv/easyterms/internal/core"
 	"github.com/tikhomirovv/easyterms/internal/core/domain"
 	"github.com/tikhomirovv/easyterms/internal/core/ports"
+	"github.com/tikhomirovv/easyterms/internal/ingest/urlfetch"
 )
 
 // Billing gates and records check consumption.
@@ -18,12 +19,24 @@ type Billing interface {
 	ConsumeCheck(ctx context.Context, userID, documentID uuid.UUID) error
 }
 
+// URLFetcher downloads a page and returns plain text for ingest.
+type URLFetcher interface {
+	FetchText(ctx context.Context, rawURL string) (string, error)
+}
+
+type defaultURLFetcher struct{}
+
+func (defaultURLFetcher) FetchText(ctx context.Context, rawURL string) (string, error) {
+	return urlfetch.FetchText(ctx, rawURL, nil)
+}
+
 // Service handles document use cases.
 type Service struct {
 	users   ports.UserRepository
 	docs    ports.DocumentRepository
 	sources ports.DocumentSourceRepository
 	billing Billing
+	urls    URLFetcher
 	llm     ports.LLMClient
 }
 
@@ -35,11 +48,24 @@ func NewService(
 	billing Billing,
 	llm ports.LLMClient,
 ) *Service {
+	return NewServiceWithURLFetcher(users, docs, sources, billing, defaultURLFetcher{}, llm)
+}
+
+// NewServiceWithURLFetcher allows injecting a URL fetcher (tests).
+func NewServiceWithURLFetcher(
+	users ports.UserRepository,
+	docs ports.DocumentRepository,
+	sources ports.DocumentSourceRepository,
+	billing Billing,
+	urls URLFetcher,
+	llm ports.LLMClient,
+) *Service {
 	return &Service{
 		users:   users,
 		docs:    docs,
 		sources: sources,
 		billing: billing,
+		urls:    urls,
 		llm:     llm,
 	}
 }
@@ -141,7 +167,10 @@ func (s *Service) Ingest(ctx context.Context, userID, documentID uuid.UUID) (*do
 		}
 	}
 
-	extractReq := buildExtractRequest(srcs, user.Locale, doc.ID.String())
+	extractReq, err := s.buildExtractRequest(ctx, srcs, user.Locale, doc.ID.String())
+	if err != nil {
+		return nil, err
+	}
 	resp, err := s.llm.ExtractCleanText(ctx, extractReq)
 	if err != nil {
 		return nil, fmt.Errorf("ingest llm: %w", err)
@@ -208,29 +237,30 @@ func (s *Service) nextSequence(ctx context.Context, documentID uuid.UUID) (int, 
 	return len(srcs), nil
 }
 
-func buildExtractRequest(srcs []domain.DocumentSource, locale, documentID string) ports.ExtractRequest {
-	var texts, urls []string
-	for _, s := range srcs {
-		switch s.Kind {
+func (s *Service) buildExtractRequest(ctx context.Context, srcs []domain.DocumentSource, locale, documentID string) (ports.ExtractRequest, error) {
+	var parts []string
+	for _, src := range srcs {
+		switch src.Kind {
 		case domain.SourceKindText:
-			if s.Content != nil {
-				texts = append(texts, *s.Content)
+			if src.Content != nil {
+				parts = append(parts, *src.Content)
 			}
 		case domain.SourceKindURL:
-			if s.SourceURL != nil {
-				urls = append(urls, *s.SourceURL)
+			if src.SourceURL == nil {
+				continue
 			}
+			pageText, err := s.urls.FetchText(ctx, *src.SourceURL)
+			if err != nil {
+				return ports.ExtractRequest{}, fmt.Errorf("fetch url %s: %w", *src.SourceURL, err)
+			}
+			parts = append(parts, pageText)
 		}
 	}
-	req := ports.ExtractRequest{
+	return ports.ExtractRequest{
 		Locale:     locale,
 		DocumentID: documentID,
-		RawText:    strings.Join(texts, "\n\n"),
-	}
-	if len(urls) > 0 {
-		req.URL = strings.Join(urls, "\n")
-	}
-	return req
+		RawText:    strings.Join(parts, "\n\n"),
+	}, nil
 }
 
 func assembleOriginalText(srcs []domain.DocumentSource) string {
