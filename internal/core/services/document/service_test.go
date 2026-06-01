@@ -255,3 +255,43 @@ func TestDocumentService_listHistory(t *testing.T) {
 		t.Fatalf("len = %d", len(list))
 	}
 }
+
+type stubURLFetcher struct {
+	text string
+	err  error
+}
+
+func (f stubURLFetcher) FetchText(context.Context, string) (string, error) {
+	return f.text, f.err
+}
+
+func TestDocumentService_ingestURLSource(t *testing.T) {
+	ctx := context.Background()
+	mem := newMemStore()
+	user := &domain.User{TelegramID: 4, Locale: "en", CheckBalance: 1}
+	_ = mem.userRepo().Create(ctx, user)
+
+	var gotRaw string
+	llm := &mockLLM{
+		extract: func(_ context.Context, req ports.ExtractRequest) (ports.ExtractResponse, error) {
+			gotRaw = req.RawText
+			return ports.ExtractResponse{CleanText: "clean"}, nil
+		},
+	}
+	bill := &memBilling{users: &memUsers{mem}, ledger: &memLedger{mem}}
+	svc := document.NewServiceWithURLFetcher(
+		mem.userRepo(), mem.docRepo(), mem.sourceRepo(), bill,
+		stubURLFetcher{text: "fetched page text"},
+		llm,
+	)
+
+	doc, _ := svc.CreateDocument(ctx, user.ID)
+	_ = svc.AddURLSource(ctx, user.ID, doc.ID, "https://example.com/terms")
+	_, err := svc.Ingest(ctx, user.ID, doc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotRaw != "fetched page text" {
+		t.Fatalf("raw = %q", gotRaw)
+	}
+}
