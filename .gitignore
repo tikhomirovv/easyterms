@@ -23,6 +23,8 @@ go.work.sum
 .DS_Store
 *.swp
 
-# Env secrets (never commit)
+# Env secrets (never commit); keep .env.example in repo
 .env
-.env.*
+.env.local
+.env.*.local
+!.env.example
