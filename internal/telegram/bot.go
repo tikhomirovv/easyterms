@@ -159,10 +159,8 @@ func (a *App) runAnalysis(
 	if err != nil {
 		return a.reply(ctx, b, update, userFacingErr(locale, err), ingestedKeyboard(locale))
 	}
-	body := format(res.Payload)
-	if len(body) > 3500 {
-		body = body[:3500] + "…"
-	}
+	body := sanitizeUTF8(format(res.Payload))
+	body = truncateRunes(body, 3500)
 	text := fmt.Sprintf(i18n.T(locale, msgKey), body)
 	return a.reply(ctx, b, update, withDisclaimer(locale, text), ingestedKeyboard(locale))
 }
@@ -215,7 +213,7 @@ func (a *App) reply(ctx context.Context, b *bot.Bot, update *models.Update, text
 	}
 	params := &bot.SendMessageParams{
 		ChatID: chatID,
-		Text:   text,
+		Text:   sanitizeUTF8(text),
 	}
 	if kb != nil {
 		params.ReplyMarkup = kb

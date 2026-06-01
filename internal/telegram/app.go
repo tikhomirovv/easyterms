@@ -117,9 +117,9 @@ func formatPlainPayload(payload []byte) string {
 		Summary string `json:"summary"`
 	}
 	if err := json.Unmarshal(payload, &v); err == nil && v.Summary != "" {
-		return v.Summary
+		return sanitizeUTF8(v.Summary)
 	}
-	return string(payload)
+	return sanitizeUTF8(string(payload))
 }
 
 func formatHighlightsPayload(payload []byte) string {
@@ -131,14 +131,18 @@ func formatHighlightsPayload(payload []byte) string {
 		} `json:"highlights"`
 	}
 	if err := json.Unmarshal(payload, &v); err != nil || len(v.Highlights) == 0 {
-		return string(payload)
+		return sanitizeUTF8(string(payload))
 	}
 	var b strings.Builder
 	for i, h := range v.Highlights {
 		if i > 0 {
 			b.WriteString("\n\n")
 		}
-		fmt.Fprintf(&b, "• %s (%s)\n%s", h.Title, h.Severity, h.Explanation)
+		fmt.Fprintf(&b, "• %s (%s)\n%s",
+			sanitizeUTF8(h.Title),
+			sanitizeUTF8(h.Severity),
+			sanitizeUTF8(h.Explanation),
+		)
 	}
 	return b.String()
 }
