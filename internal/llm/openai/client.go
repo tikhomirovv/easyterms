@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -31,7 +32,13 @@ func NewClient(cfg Config, httpClient *http.Client) *Client {
 // ExtractCleanText calls the chat API to normalize input into clean document text.
 func (c *Client) ExtractCleanText(ctx context.Context, req ports.ExtractRequest) (ports.ExtractResponse, error) {
 	system, user := prompts.ExtractMessages(req, "")
-	content, err := c.chat(ctx, system, user, false)
+	slog.Debug("llm: extract",
+		slog.String("model", c.cfg.Model),
+		slog.String("document_id", req.DocumentID),
+		slog.Int("user_chars", len(user)),
+		slog.Int("system_chars", len(system)),
+	)
+	content, err := c.chat(ctx, "extract", system, user, false)
 	if err != nil {
 		return ports.ExtractResponse{}, err
 	}
@@ -41,7 +48,14 @@ func (c *Client) ExtractCleanText(ctx context.Context, req ports.ExtractRequest)
 // Analyze calls the chat API for a structured analysis result (JSON payload).
 func (c *Client) Analyze(ctx context.Context, req ports.AnalyzeRequest) (ports.AnalyzeResponse, error) {
 	system, user, jsonMode := prompts.AnalyzeMessages(req, "")
-	content, err := c.chat(ctx, system, user, jsonMode)
+	slog.Debug("llm: analyze",
+		slog.String("model", c.cfg.Model),
+		slog.String("document_id", req.DocumentID),
+		slog.String("analysis_type", req.AnalysisType),
+		slog.Int("user_chars", len(user)),
+		slog.Bool("json_mode", jsonMode && c.cfg.JSONMode),
+	)
+	content, err := c.chat(ctx, "analyze", system, user, jsonMode)
 	if err != nil {
 		return ports.AnalyzeResponse{}, err
 	}
@@ -69,7 +83,7 @@ func extractJSONPayload(content string) []byte {
 	return []byte(content)
 }
 
-func (c *Client) chat(ctx context.Context, system, user string, jsonMode bool) (string, error) {
+func (c *Client) chat(ctx context.Context, op, system, user string, jsonMode bool) (string, error) {
 	body := chatRequest{
 		Model: c.cfg.Model,
 		Messages: []chatMessage{
@@ -77,7 +91,8 @@ func (c *Client) chat(ctx context.Context, system, user string, jsonMode bool) (
 			{Role: "user", Content: user},
 		},
 	}
-	if jsonMode && c.cfg.JSONMode {
+	useJSON := jsonMode && c.cfg.JSONMode
+	if useJSON {
 		body.ResponseFormat = &responseFormat{Type: "json_object"}
 	}
 
@@ -87,6 +102,13 @@ func (c *Client) chat(ctx context.Context, system, user string, jsonMode bool) (
 	}
 
 	url := c.cfg.BaseURL + "/chat/completions"
+	slog.Debug("llm: http request",
+		slog.String("op", op),
+		slog.String("url", url),
+		slog.String("model", c.cfg.Model),
+		slog.Int("payload_bytes", len(payload)),
+		slog.Bool("json_object", useJSON),
+	)
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
 		return "", fmt.Errorf("llm: build request: %w", err)

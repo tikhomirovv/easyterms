@@ -53,6 +53,9 @@ go run ./cmd/telegram
 | `LLM_MODEL` | Имя модели |
 | `LLM_JSON_MODE` | `true` для OpenAI; часто `false` для LM Studio |
 | `LLM_PROVIDER_LABEL` | Метка в логах |
+| `LLM_MAX_INPUT_CHARS` | Лимит символов на запрос к LLM (по умолчанию `8000`) |
+
+Длинный текст **обрезается** перед отправкой в модель. Для LM Studio с `n_ctx=4096` поставьте, например, `LLM_MAX_INPUT_CHARS=3000`, или увеличьте context length при загрузке модели.
 
 ### OpenAI (облако)
 
@@ -76,6 +79,13 @@ LLM_PROVIDER_LABEL=lm-studio
 ```
 
 `LLM_MODEL` должен совпадать с именем модели в LM Studio.
+
+```env
+LOG_LEVEL=debug
+LLM_MAX_INPUT_CHARS=3000
+```
+
+`LOG_LEVEL=debug` — подробные логи ingest, analysis и HTTP-запросов к LLM.
 
 ## Команды
 

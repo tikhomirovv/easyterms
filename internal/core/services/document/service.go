@@ -10,12 +10,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/tikhomirovv/easyterms/internal/core"
 	"github.com/tikhomirovv/easyterms/internal/core/domain"
+	"github.com/tikhomirovv/easyterms/internal/core/llmlimits"
 	"github.com/tikhomirovv/easyterms/internal/core/ports"
 	"github.com/tikhomirovv/easyterms/internal/ingest/urlfetch"
 )
-
-// maxIngestChars limits LLM input size (local models often have smaller context windows).
-const maxIngestChars = 100_000
 
 // Billing gates and records check consumption.
 type Billing interface {
@@ -136,6 +134,11 @@ func (s *Service) AddURLSource(ctx context.Context, userID, documentID uuid.UUID
 
 // Ingest runs LLM extraction, persists clean text, and consumes one check on first success.
 func (s *Service) Ingest(ctx context.Context, userID, documentID uuid.UUID) (*domain.Document, error) {
+	slog.Debug("ingest: start",
+		slog.String("document_id", documentID.String()),
+		slog.String("user_id", userID.String()),
+		slog.Int("llm_max_input_chars", llmlimits.MaxInputChars()),
+	)
 	doc, err := s.docs.GetByID(ctx, documentID)
 	if err != nil {
 		return nil, err
@@ -146,6 +149,7 @@ func (s *Service) Ingest(ctx context.Context, userID, documentID uuid.UUID) (*do
 
 	// Already ingested with consumed check — return cached document without calling LLM.
 	if doc.CheckConsumed && doc.CleanText != nil && *doc.CleanText != "" {
+		slog.Debug("ingest: skip llm, already ingested", slog.String("document_id", documentID.String()))
 		return doc, nil
 	}
 
@@ -166,6 +170,7 @@ func (s *Service) Ingest(ctx context.Context, userID, documentID uuid.UUID) (*do
 		if err != nil {
 			return nil, err
 		}
+		slog.Debug("ingest: balance check", slog.Bool("has_checks", ok), slog.String("document_id", documentID.String()))
 		if !ok {
 			return nil, core.ErrInsufficientBalance
 		}
@@ -179,7 +184,17 @@ func (s *Service) Ingest(ctx context.Context, userID, documentID uuid.UUID) (*do
 		)
 		return nil, err
 	}
-	extractReq.RawText = truncateForLLM(extractReq.RawText)
+	before := len(extractReq.RawText)
+	var truncated bool
+	extractReq.RawText, truncated = llmlimits.TruncateForLLM(extractReq.RawText)
+	if truncated {
+		slog.Debug("ingest: input truncated for llm",
+			slog.String("document_id", doc.ID.String()),
+			slog.Int("raw_chars", before),
+			slog.Int("sent_chars", len(extractReq.RawText)),
+			slog.Int("max_chars", llmlimits.MaxInputChars()),
+		)
+	}
 	if strings.TrimSpace(extractReq.RawText) == "" {
 		slog.Warn("ingest: empty content after fetch",
 			slog.String("document_id", doc.ID.String()),
@@ -206,17 +221,23 @@ func (s *Service) Ingest(ctx context.Context, userID, documentID uuid.UUID) (*do
 	clean := strings.TrimSpace(resp.CleanText)
 	doc.CleanText = &clean
 	doc.Status = domain.DocumentStatusIngested
+	slog.Debug("ingest: llm extract ok",
+		slog.String("document_id", doc.ID.String()),
+		slog.Int("clean_chars", len(clean)),
+	)
 
 	if !doc.CheckConsumed {
 		if err := s.billing.ConsumeCheck(ctx, userID, doc.ID); err != nil {
 			return nil, err
 		}
 		doc.CheckConsumed = true
+		slog.Debug("ingest: check consumed", slog.String("document_id", doc.ID.String()))
 	}
 
 	if err := s.docs.Update(ctx, doc); err != nil {
 		return nil, err
 	}
+	slog.Debug("ingest: done", slog.String("document_id", doc.ID.String()))
 	return doc, nil
 }
 
@@ -274,10 +295,15 @@ func (s *Service) buildExtractRequest(ctx context.Context, srcs []domain.Documen
 			if src.SourceURL == nil {
 				continue
 			}
+			slog.Debug("ingest: fetch url", slog.String("url", *src.SourceURL), slog.String("document_id", documentID))
 			pageText, err := s.urls.FetchText(ctx, *src.SourceURL)
 			if err != nil {
 				return ports.ExtractRequest{}, fmt.Errorf("fetch url %s: %w", *src.SourceURL, err)
 			}
+			slog.Debug("ingest: url fetched",
+				slog.String("url", *src.SourceURL),
+				slog.Int("chars", len(pageText)),
+			)
 			parts = append(parts, pageText)
 		}
 	}
@@ -292,13 +318,6 @@ func (s *Service) buildExtractRequest(ctx context.Context, srcs []domain.Documen
 		DocumentID: documentID,
 		RawText:    raw,
 	}, nil
-}
-
-func truncateForLLM(s string) string {
-	if len(s) <= maxIngestChars {
-		return s
-	}
-	return s[:maxIngestChars] + "\n\n[truncated for model context limit]"
 }
 
 func assembleOriginalText(srcs []domain.DocumentSource) string {

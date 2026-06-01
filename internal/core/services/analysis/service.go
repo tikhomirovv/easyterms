@@ -5,10 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/tikhomirovv/easyterms/internal/core"
 	"github.com/tikhomirovv/easyterms/internal/core/domain"
+	"github.com/tikhomirovv/easyterms/internal/core/llmlimits"
 	"github.com/tikhomirovv/easyterms/internal/core/ports"
 )
 
@@ -39,6 +42,11 @@ func NewService(
 // Run executes an analysis mode for a document owned by the user.
 // Results are cached per document and analysis type; repeat calls skip the LLM.
 func (s *Service) Run(ctx context.Context, userID, documentID uuid.UUID, analysisType string) (*domain.AnalysisResult, error) {
+	slog.Debug("analysis: start",
+		slog.String("document_id", documentID.String()),
+		slog.String("user_id", userID.String()),
+		slog.String("type", analysisType),
+	)
 	if !isSupportedType(analysisType) {
 		return nil, fmt.Errorf("unsupported analysis type %q", analysisType)
 	}
@@ -60,6 +68,7 @@ func (s *Service) Run(ctx context.Context, userID, documentID uuid.UUID, analysi
 	}
 
 	if cached, err := s.results.GetByDocumentAndType(ctx, documentID, analysisType); err == nil {
+		slog.Debug("analysis: cache hit", slog.String("document_id", documentID.String()), slog.String("type", analysisType))
 		out := *cached
 		out.Cached = true
 		return &out, nil
@@ -71,6 +80,22 @@ func (s *Service) Run(ctx context.Context, userID, documentID uuid.UUID, analysi
 	if doc.CleanText != nil {
 		clean = *doc.CleanText
 	}
+	before := len(clean)
+	clean, truncated := llmlimits.TruncateForLLM(clean)
+	if truncated {
+		slog.Debug("analysis: input truncated",
+			slog.Int("raw_chars", before),
+			slog.Int("sent_chars", len(clean)),
+		)
+	}
+	if strings.TrimSpace(clean) == "" {
+		return nil, fmt.Errorf("analysis: empty clean text")
+	}
+	slog.Debug("analysis: calling llm",
+		slog.String("document_id", documentID.String()),
+		slog.Int("input_chars", len(clean)),
+		slog.Bool("json_mode", true),
+	)
 	resp, err := s.llm.Analyze(ctx, ports.AnalyzeRequest{
 		CleanText:    clean,
 		AnalysisType: analysisType,
@@ -78,8 +103,17 @@ func (s *Service) Run(ctx context.Context, userID, documentID uuid.UUID, analysi
 		DocumentID:   doc.ID.String(),
 	})
 	if err != nil {
+		slog.Warn("analysis: llm failed",
+			slog.String("document_id", documentID.String()),
+			slog.String("type", analysisType),
+			slog.String("error", err.Error()),
+		)
 		return nil, fmt.Errorf("analysis llm: %w", err)
 	}
+	slog.Debug("analysis: llm ok",
+		slog.String("document_id", documentID.String()),
+		slog.Int("payload_bytes", len(resp.Payload)),
+	)
 
 	meta, _ := json.Marshal(map[string]string{"prompt_version": "v1"})
 	result := &domain.AnalysisResult{
