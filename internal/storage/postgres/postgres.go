@@ -47,6 +47,10 @@ func (s *Store) Documents() ports.DocumentRepository {
 	return &documentRepo{pool: s.pool}
 }
 
+func (s *Store) DocumentSources() ports.DocumentSourceRepository {
+	return &documentSourceRepo{pool: s.pool}
+}
+
 func (s *Store) AnalysisResults() ports.AnalysisResultRepository {
 	return &analysisResultRepo{pool: s.pool}
 }
