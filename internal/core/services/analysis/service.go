@@ -11,7 +11,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/tikhomirovv/easyterms/internal/core"
 	"github.com/tikhomirovv/easyterms/internal/core/domain"
-	"github.com/tikhomirovv/easyterms/internal/core/llmlimits"
 	"github.com/tikhomirovv/easyterms/internal/core/ports"
 )
 
@@ -79,14 +78,6 @@ func (s *Service) Run(ctx context.Context, userID, documentID uuid.UUID, analysi
 	clean := ""
 	if doc.CleanText != nil {
 		clean = *doc.CleanText
-	}
-	before := len(clean)
-	clean, truncated := llmlimits.TruncateForLLM(clean)
-	if truncated {
-		slog.Debug("analysis: input truncated",
-			slog.Int("raw_chars", before),
-			slog.Int("sent_chars", len(clean)),
-		)
 	}
 	if strings.TrimSpace(clean) == "" {
 		return nil, fmt.Errorf("analysis: empty clean text")

@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/tikhomirovv/easyterms/internal/core"
 	"github.com/tikhomirovv/easyterms/internal/core/domain"
-	"github.com/tikhomirovv/easyterms/internal/core/llmlimits"
 	"github.com/tikhomirovv/easyterms/internal/core/ports"
 	"github.com/tikhomirovv/easyterms/internal/ingest/urlfetch"
 )
@@ -137,7 +136,6 @@ func (s *Service) Ingest(ctx context.Context, userID, documentID uuid.UUID) (*do
 	slog.Debug("ingest: start",
 		slog.String("document_id", documentID.String()),
 		slog.String("user_id", userID.String()),
-		slog.Int("llm_max_input_chars", llmlimits.MaxInputChars()),
 	)
 	doc, err := s.docs.GetByID(ctx, documentID)
 	if err != nil {
@@ -183,17 +181,6 @@ func (s *Service) Ingest(ctx context.Context, userID, documentID uuid.UUID) (*do
 			slog.String("error", err.Error()),
 		)
 		return nil, err
-	}
-	before := len(extractReq.RawText)
-	var truncated bool
-	extractReq.RawText, truncated = llmlimits.TruncateForLLM(extractReq.RawText)
-	if truncated {
-		slog.Debug("ingest: input truncated for llm",
-			slog.String("document_id", doc.ID.String()),
-			slog.Int("raw_chars", before),
-			slog.Int("sent_chars", len(extractReq.RawText)),
-			slog.Int("max_chars", llmlimits.MaxInputChars()),
-		)
 	}
 	if strings.TrimSpace(extractReq.RawText) == "" {
 		slog.Warn("ingest: empty content after fetch",
