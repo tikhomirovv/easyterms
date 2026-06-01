@@ -13,7 +13,7 @@ import (
 	"github.com/tikhomirovv/easyterms/internal/core/services/analysis"
 	"github.com/tikhomirovv/easyterms/internal/core/services/billing"
 	"github.com/tikhomirovv/easyterms/internal/core/services/document"
-	"github.com/tikhomirovv/easyterms/internal/llm/openai"
+	"github.com/tikhomirovv/easyterms/internal/llm"
 	"github.com/tikhomirovv/easyterms/internal/payment/manual"
 	"github.com/tikhomirovv/easyterms/internal/storage/postgres"
 	"github.com/tikhomirovv/easyterms/internal/telegram"
@@ -47,11 +47,10 @@ func run(ctx context.Context) error {
 	}
 	slog.SetDefault(log)
 
-	llmCfg, err := openai.LoadConfig()
+	llmClient, err := llm.NewClientFromEnv()
 	if err != nil {
-		return fmt.Errorf("llm config: %w", err)
+		return fmt.Errorf("llm: %w", err)
 	}
-	llm := openai.NewClient(llmCfg, nil)
 
 	store, err := postgres.NewStore(ctx, cfg.DatabaseURL)
 	if err != nil {
@@ -60,8 +59,8 @@ func run(ctx context.Context) error {
 	defer store.Close()
 
 	bill := billing.NewService(store.Users(), store.Ledger(), store.Purchases(), manual.NewProvider())
-	docs := document.NewService(store.Users(), store.Documents(), store.DocumentSources(), bill, llm)
-	analyze := analysis.NewService(store.Users(), store.Documents(), store.AnalysisResults(), llm)
+	docs := document.NewService(store.Users(), store.Documents(), store.DocumentSources(), bill, llmClient)
+	analyze := analysis.NewService(store.Users(), store.Documents(), store.AnalysisResults(), llmClient)
 
 	app := telegram.NewApp(store.Users(), docs, bill, analyze, log)
 	log.Info("easyterms telegram starting", slog.String("log_level", cfg.LogLevel))

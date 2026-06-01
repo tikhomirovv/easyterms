@@ -126,7 +126,7 @@ Adapters живут **вне core** (`internal/llm/...`) и реализуют p
 | `OpenAICompatibleProvider` | MVP / v1 | OpenAI, OpenRouter — один HTTP-клиент, разный конфиг |
 | (future) другие провайдеры | по demand | Новый файл, core не меняется |
 
-Конфиг adapter (env): `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_PROVIDER_LABEL` (логи, `AnalysisResult.meta`).
+Конфиг adapter (env): `LLM_PROVIDER` (default `openai-compatible`), `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_JSON_MODE` (default `true`; `false` для части локальных моделей), `LLM_PROVIDER_LABEL` (логи, `AnalysisResult.meta`). Один HTTP-адаптер для OpenAI, OpenRouter, **LM Studio**, Ollama OpenAI-shim и др.
 
 ### Правила для разработки
 

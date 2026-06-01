@@ -47,9 +47,16 @@ func TestLoad_fromDotEnv(t *testing.T) {
 	if err := os.WriteFile(envPath, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(dir)
-	t.Setenv("LOG_LEVEL", "")
-	t.Setenv("DATABASE_URL", "")
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(wd) }()
+	os.Unsetenv("LOG_LEVEL")
+	os.Unsetenv("DATABASE_URL")
 
 	cfg, err := Load()
 	if err != nil {

@@ -46,10 +46,27 @@ func (c *Client) Analyze(ctx context.Context, req ports.AnalyzeRequest) (ports.A
 		return ports.AnalyzeResponse{}, err
 	}
 	content = strings.TrimSpace(content)
-	if !json.Valid([]byte(content)) {
+	payload := extractJSONPayload(content)
+	if !json.Valid(payload) {
 		return ports.AnalyzeResponse{}, fmt.Errorf("llm: analyze response is not valid JSON")
 	}
-	return ports.AnalyzeResponse{Payload: []byte(content)}, nil
+	return ports.AnalyzeResponse{Payload: payload}, nil
+}
+
+// extractJSONPayload returns JSON from raw model text (handles markdown fences from local models).
+func extractJSONPayload(content string) []byte {
+	if json.Valid([]byte(content)) {
+		return []byte(content)
+	}
+	start := strings.Index(content, "{")
+	end := strings.LastIndex(content, "}")
+	if start >= 0 && end > start {
+		candidate := content[start : end+1]
+		if json.Valid([]byte(candidate)) {
+			return []byte(candidate)
+		}
+	}
+	return []byte(content)
 }
 
 func (c *Client) chat(ctx context.Context, system, user string, jsonMode bool) (string, error) {
@@ -60,7 +77,7 @@ func (c *Client) chat(ctx context.Context, system, user string, jsonMode bool) (
 			{Role: "user", Content: user},
 		},
 	}
-	if jsonMode {
+	if jsonMode && c.cfg.JSONMode {
 		body.ResponseFormat = &responseFormat{Type: "json_object"}
 	}
 

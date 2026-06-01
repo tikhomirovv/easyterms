@@ -29,9 +29,10 @@ func TestExtractCleanText(t *testing.T) {
 	defer srv.Close()
 
 	client := openai.NewClient(openai.Config{
-		BaseURL: srv.URL + "/v1",
-		APIKey:  "test-key",
-		Model:   "test-model",
+		BaseURL:  srv.URL + "/v1",
+		APIKey:   "test-key",
+		Model:    "test-model",
+		JSONMode: true,
 	}, srv.Client())
 
 	resp, err := client.ExtractCleanText(context.Background(), ports.ExtractRequest{
@@ -68,9 +69,10 @@ func TestAnalyze_JSONPayload(t *testing.T) {
 	defer srv.Close()
 
 	client := openai.NewClient(openai.Config{
-		BaseURL: srv.URL + "/v1",
-		APIKey:  "key",
-		Model:   "m",
+		BaseURL:  srv.URL + "/v1",
+		APIKey:   "key",
+		Model:    "m",
+		JSONMode: true,
 	}, srv.Client())
 
 	resp, err := client.Analyze(context.Background(), ports.AnalyzeRequest{
@@ -110,11 +112,42 @@ func TestChat_APIErrorStatus(t *testing.T) {
 	}
 }
 
-func TestLoadConfig_requiresAPIKey(t *testing.T) {
-	t.Setenv("LLM_API_KEY", "")
-	_, err := openai.LoadConfig()
-	if err == nil {
-		t.Fatal("expected error when LLM_API_KEY missing")
+func TestAnalyze_withoutJSONMode(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body chatRequest
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body.ResponseFormat != nil {
+			t.Fatal("expected no response_format when JSONMode disabled")
+		}
+		_ = json.NewEncoder(w).Encode(chatResponse{
+			Choices: []chatChoice{{
+				Message: chatMessage{Content: "```json\n{\"summary\":\"ok\"}\n```"},
+			}},
+		})
+	}))
+	defer srv.Close()
+
+	client := openai.NewClient(openai.Config{
+		BaseURL:  srv.URL + "/v1",
+		APIKey:   "local",
+		Model:    "m",
+		JSONMode: false,
+	}, srv.Client())
+
+	resp, err := client.Analyze(context.Background(), ports.AnalyzeRequest{
+		CleanText:    "text",
+		AnalysisType: "plain",
+		Locale:       "en",
+	})
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	var parsed map[string]string
+	if err := json.Unmarshal(resp.Payload, &parsed); err != nil {
+		t.Fatalf("payload: %v", err)
+	}
+	if parsed["summary"] != "ok" {
+		t.Fatalf("summary = %q", parsed["summary"])
 	}
 }
 
