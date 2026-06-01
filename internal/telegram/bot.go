@@ -89,8 +89,12 @@ func (a *App) handleText(ctx context.Context, b *bot.Bot, update *models.Update)
 		return a.reply(ctx, b, update, i18n.T(locale, "no_active_doc"), mainMenuKeyboard(locale))
 	}
 
-	text := update.Message.Text
+	text := normalizeInputURL(update.Message.Text)
 	if isURL(text) {
+		a.log.Info("document: add url source",
+			slog.String("document_id", draft.ID.String()),
+			slog.String("url", text),
+		)
 		err = a.docs.AddURLSource(ctx, user.ID, draft.ID, text)
 	} else {
 		err = a.docs.AddTextSource(ctx, user.ID, draft.ID, text)
@@ -111,8 +115,17 @@ func (a *App) handleReady(ctx context.Context, b *bot.Bot, update *models.Update
 	if err != nil {
 		return a.reply(ctx, b, update, i18n.T(locale, "no_active_doc"), mainMenuKeyboard(locale))
 	}
+	a.log.Info("document: ingest start",
+		slog.String("document_id", draft.ID.String()),
+		slog.Int64("telegram_id", a.telegramID(update)),
+	)
 	_, err = a.docs.Ingest(ctx, user.ID, draft.ID)
 	if err != nil {
+		a.log.Warn("document: ingest failed",
+			slog.String("document_id", draft.ID.String()),
+			slog.Int64("telegram_id", a.telegramID(update)),
+			slog.String("error", err.Error()),
+		)
 		return a.reply(ctx, b, update, userFacingErr(locale, err), draftKeyboard(locale))
 	}
 	return a.reply(ctx, b, update, withDisclaimer(locale, i18n.T(locale, "ingest_ok")), ingestedKeyboard(locale))

@@ -81,10 +81,17 @@ func FetchText(ctx context.Context, rawURL string, client *http.Client) (string,
 
 	ct := strings.ToLower(resp.Header.Get("Content-Type"))
 	text := string(body)
+	rawHTML := string(body)
 	if strings.Contains(ct, "html") || strings.Contains(ct, "xhtml") || looksLikeHTML(body) {
-		text, err = HTMLToText(string(body))
+		text, err = HTMLToText(rawHTML)
 		if err != nil {
 			return "", err
+		}
+		// SPAs and minimal HTML often have little body text; use meta tags as fallback.
+		if len(strings.TrimSpace(text)) < 200 {
+			if meta := htmlMetaText(rawHTML); meta != "" {
+				text = strings.TrimSpace(text + " " + meta)
+			}
 		}
 	}
 
@@ -131,6 +138,46 @@ func walkText(n *html.Node, out *strings.Builder) {
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
 		walkText(c, out)
 	}
+}
+
+// htmlMetaText collects description-like meta tags (many legal pages expose little body text).
+func htmlMetaText(htmlContent string) string {
+	doc, err := html.Parse(strings.NewReader(htmlContent))
+	if err != nil {
+		return ""
+	}
+	var parts []string
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode && strings.EqualFold(n.Data, "meta") {
+			var name, prop, content string
+			for _, a := range n.Attr {
+				switch strings.ToLower(a.Key) {
+				case "name":
+					name = strings.ToLower(a.Val)
+				case "property":
+					prop = strings.ToLower(a.Val)
+				case "content":
+					content = strings.TrimSpace(a.Val)
+				}
+			}
+			if content != "" {
+				switch name {
+				case "description":
+					parts = append(parts, content)
+				}
+				switch prop {
+				case "og:description", "og:title", "twitter:description":
+					parts = append(parts, content)
+				}
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(doc)
+	return collapseWhitespace(strings.Join(parts, " "))
 }
 
 func collapseWhitespace(s string) string {

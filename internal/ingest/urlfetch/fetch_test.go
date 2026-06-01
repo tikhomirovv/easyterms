@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/tikhomirovv/easyterms/internal/ingest/urlfetch"
@@ -44,6 +45,24 @@ func TestFetchText_unreachable(t *testing.T) {
 	_, err := urlfetch.FetchText(context.Background(), "http://127.0.0.1:1/nope", &http.Client{Timeout: 0})
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestFetchText_metaFallback(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><head>
+<meta name="description" content="Privacy policy for our service."/>
+</head><body><div id="app"></div></body></html>`))
+	}))
+	defer srv.Close()
+
+	text, err := urlfetch.FetchText(context.Background(), srv.URL, srv.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(text, "Privacy policy") {
+		t.Fatalf("text = %q", text)
 	}
 }
 

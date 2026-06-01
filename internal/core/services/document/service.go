@@ -4,6 +4,7 @@ package document
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
@@ -132,6 +133,10 @@ func (s *Service) AddURLSource(ctx context.Context, userID, documentID uuid.UUID
 
 // Ingest runs LLM extraction, persists clean text, and consumes one check on first success.
 func (s *Service) Ingest(ctx context.Context, userID, documentID uuid.UUID) (*domain.Document, error) {
+	slog.Debug("ingest: start",
+		slog.String("document_id", documentID.String()),
+		slog.String("user_id", userID.String()),
+	)
 	doc, err := s.docs.GetByID(ctx, documentID)
 	if err != nil {
 		return nil, err
@@ -142,6 +147,7 @@ func (s *Service) Ingest(ctx context.Context, userID, documentID uuid.UUID) (*do
 
 	// Already ingested with consumed check — return cached document without calling LLM.
 	if doc.CheckConsumed && doc.CleanText != nil && *doc.CleanText != "" {
+		slog.Debug("ingest: skip llm, already ingested", slog.String("document_id", documentID.String()))
 		return doc, nil
 	}
 
@@ -162,6 +168,7 @@ func (s *Service) Ingest(ctx context.Context, userID, documentID uuid.UUID) (*do
 		if err != nil {
 			return nil, err
 		}
+		slog.Debug("ingest: balance check", slog.Bool("has_checks", ok), slog.String("document_id", documentID.String()))
 		if !ok {
 			return nil, core.ErrInsufficientBalance
 		}
@@ -169,10 +176,30 @@ func (s *Service) Ingest(ctx context.Context, userID, documentID uuid.UUID) (*do
 
 	extractReq, err := s.buildExtractRequest(ctx, srcs, user.Locale, doc.ID.String())
 	if err != nil {
+		slog.Warn("ingest: build extract request failed",
+			slog.String("document_id", doc.ID.String()),
+			slog.String("error", err.Error()),
+		)
 		return nil, err
 	}
+	if strings.TrimSpace(extractReq.RawText) == "" {
+		slog.Warn("ingest: empty content after fetch",
+			slog.String("document_id", doc.ID.String()),
+			slog.Int("sources", len(srcs)),
+		)
+		return nil, fmt.Errorf("ingest: no text content from sources")
+	}
+
+	slog.Info("ingest: calling llm",
+		slog.String("document_id", doc.ID.String()),
+		slog.Int("input_chars", len(extractReq.RawText)),
+	)
 	resp, err := s.llm.ExtractCleanText(ctx, extractReq)
 	if err != nil {
+		slog.Warn("ingest: llm extract failed",
+			slog.String("document_id", doc.ID.String()),
+			slog.String("error", err.Error()),
+		)
 		return nil, fmt.Errorf("ingest llm: %w", err)
 	}
 
@@ -181,17 +208,23 @@ func (s *Service) Ingest(ctx context.Context, userID, documentID uuid.UUID) (*do
 	clean := strings.TrimSpace(resp.CleanText)
 	doc.CleanText = &clean
 	doc.Status = domain.DocumentStatusIngested
+	slog.Debug("ingest: llm extract ok",
+		slog.String("document_id", doc.ID.String()),
+		slog.Int("clean_chars", len(clean)),
+	)
 
 	if !doc.CheckConsumed {
 		if err := s.billing.ConsumeCheck(ctx, userID, doc.ID); err != nil {
 			return nil, err
 		}
 		doc.CheckConsumed = true
+		slog.Debug("ingest: check consumed", slog.String("document_id", doc.ID.String()))
 	}
 
 	if err := s.docs.Update(ctx, doc); err != nil {
 		return nil, err
 	}
+	slog.Debug("ingest: done", slog.String("document_id", doc.ID.String()))
 	return doc, nil
 }
 
@@ -249,17 +282,28 @@ func (s *Service) buildExtractRequest(ctx context.Context, srcs []domain.Documen
 			if src.SourceURL == nil {
 				continue
 			}
+			slog.Debug("ingest: fetch url", slog.String("url", *src.SourceURL), slog.String("document_id", documentID))
 			pageText, err := s.urls.FetchText(ctx, *src.SourceURL)
 			if err != nil {
 				return ports.ExtractRequest{}, fmt.Errorf("fetch url %s: %w", *src.SourceURL, err)
 			}
+			slog.Debug("ingest: url fetched",
+				slog.String("url", *src.SourceURL),
+				slog.Int("chars", len(pageText)),
+			)
 			parts = append(parts, pageText)
 		}
 	}
+	raw := strings.Join(parts, "\n\n")
+	slog.Info("ingest: sources prepared",
+		slog.String("document_id", documentID),
+		slog.Int("parts", len(parts)),
+		slog.Int("raw_chars", len(raw)),
+	)
 	return ports.ExtractRequest{
 		Locale:     locale,
 		DocumentID: documentID,
-		RawText:    strings.Join(parts, "\n\n"),
+		RawText:    raw,
 	}, nil
 }
 

@@ -75,7 +75,9 @@ LLM_JSON_MODE=false
 LLM_PROVIDER_LABEL=lm-studio
 ```
 
-`LLM_MODEL` должен совпадать с именем модели в LM Studio.
+`LLM_MODEL` должен совпадать с именем модели в LM Studio. При загрузке модели задайте **достаточный context length** в LM Studio — весь текст документа уходит в LLM одним запросом.
+
+`LOG_LEVEL=debug` — подробные логи ingest, analysis и HTTP-запросов к LLM.
 
 ## Команды
 
