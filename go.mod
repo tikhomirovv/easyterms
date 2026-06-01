@@ -3,6 +3,7 @@ module github.com/tikhomirovv/easyterms
 go 1.23
 
 require (
+	github.com/go-telegram/bot v1.21.0
 	github.com/golang-migrate/migrate/v4 v4.18.2
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.2

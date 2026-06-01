@@ -3,12 +3,20 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/tikhomirovv/easyterms/internal/core/config"
+	"github.com/tikhomirovv/easyterms/internal/core/services/analysis"
+	"github.com/tikhomirovv/easyterms/internal/core/services/billing"
+	"github.com/tikhomirovv/easyterms/internal/core/services/document"
+	"github.com/tikhomirovv/easyterms/internal/llm/openai"
+	"github.com/tikhomirovv/easyterms/internal/payment/manual"
+	"github.com/tikhomirovv/easyterms/internal/storage/postgres"
+	"github.com/tikhomirovv/easyterms/internal/telegram"
 )
 
 func main() {
@@ -26,6 +34,12 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if cfg.TelegramBotToken == "" {
+		return fmt.Errorf("TELEGRAM_BOT_TOKEN is required")
+	}
+	if cfg.DatabaseURL == "" {
+		return fmt.Errorf("DATABASE_URL is required")
+	}
 
 	log, err := cfg.NewLogger()
 	if err != nil {
@@ -33,14 +47,23 @@ func run(ctx context.Context) error {
 	}
 	slog.SetDefault(log)
 
-	log.Info("easyterms telegram starting",
-		slog.String("log_level", cfg.LogLevel),
-		slog.Bool("has_bot_token", cfg.TelegramBotToken != ""),
-		slog.Bool("has_database_url", cfg.DatabaseURL != ""),
-	)
+	llmCfg, err := openai.LoadConfig()
+	if err != nil {
+		return fmt.Errorf("llm config: %w", err)
+	}
+	llm := openai.NewClient(llmCfg, nil)
 
-	// Bot wiring (handlers, core services) is added in issue #11.
-	<-ctx.Done()
-	log.Info("shutdown signal received")
-	return nil
+	store, err := postgres.NewStore(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("postgres: %w", err)
+	}
+	defer store.Close()
+
+	bill := billing.NewService(store.Users(), store.Ledger(), store.Purchases(), manual.NewProvider())
+	docs := document.NewService(store.Users(), store.Documents(), store.DocumentSources(), bill, llm)
+	analyze := analysis.NewService(store.Users(), store.Documents(), store.AnalysisResults(), llm)
+
+	app := telegram.NewApp(store.Users(), docs, bill, analyze, log)
+	log.Info("easyterms telegram starting", slog.String("log_level", cfg.LogLevel))
+	return telegram.Run(ctx, cfg.TelegramBotToken, app)
 }
