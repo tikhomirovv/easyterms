@@ -127,14 +127,26 @@ func formatHighlightsPayload(payload []byte) string {
 }
 
 func userFacingErr(locale string, err error) string {
+	msg := err.Error()
 	switch {
 	case errors.Is(err, core.ErrInsufficientBalance):
 		return i18n.T(locale, "insufficient_balance")
-	case errors.Is(err, core.ErrForbidden), errors.Is(err, core.ErrInvalidState), errors.Is(err, core.ErrNoSources):
-		return err.Error()
+	case errors.Is(err, core.ErrNoSources):
+		return i18n.T(locale, "err_ingest_failed")
+	case errors.Is(err, core.ErrForbidden), errors.Is(err, core.ErrInvalidState):
+		return i18n.T(locale, "error_generic")
+	case strings.Contains(msg, "fetch url"):
+		return i18n.T(locale, "err_url_fetch")
+	case strings.Contains(msg, "ingest llm"):
+		return i18n.T(locale, "err_ingest_failed")
 	default:
 		return i18n.T(locale, "error_generic")
 	}
+}
+
+// withDisclaimer appends the non-legal-advice notice to bot messages.
+func withDisclaimer(locale, text string) string {
+	return text + "\n\n" + i18n.T(locale, "disclaimer")
 }
 
 func (a *App) startPurchase(ctx context.Context, userID uuid.UUID, packageID, locale string) (string, error) {

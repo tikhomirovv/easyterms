@@ -13,6 +13,7 @@ func mainMenuKeyboard(locale string) *models.InlineKeyboardMarkup {
 				{Text: i18n.T(locale, "btn_balance"), CallbackData: cbBalance},
 				{Text: i18n.T(locale, "btn_buy"), CallbackData: cbBuy},
 			},
+			{{Text: i18n.T(locale, "btn_demo"), CallbackData: cbDemo}},
 		},
 	}
 }

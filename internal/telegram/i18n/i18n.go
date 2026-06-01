@@ -45,6 +45,22 @@ var messages = map[string]map[string]string{
 		"ru": "Произошла ошибка. Попробуйте позже.",
 		"en": "Something went wrong. Please try again later.",
 	},
+	"err_ingest_failed": {
+		"ru": "Не удалось обработать документ. Проверьте текст или ссылку и попробуйте снова.",
+		"en": "Could not process the document. Check the text or URL and try again.",
+	},
+	"err_url_fetch": {
+		"ru": "Не удалось загрузить страницу по ссылке. Проверьте URL или вставьте текст вручную.",
+		"en": "Could not load the page from the URL. Check the link or paste the text manually.",
+	},
+	"disclaimer": {
+		"ru": "⚠️ Это не юридическая консультация. Решение о принятии условий остаётся за вами.",
+		"en": "⚠️ This is not legal advice. You decide whether to accept the terms.",
+	},
+	"demo": {
+		"ru": "Пример (демо, без списания проверок):\n\n«Сервис может изменять условия без уведомления. Продолжая использование, вы соглашаетесь с обновлениями. Персональные данные обрабатываются для работы сервиса и могут передаваться партнёрам.»\n\nСоздайте новый документ и вставьте свой текст или ссылку для реального разбора.",
+		"en": "Example (demo, no checks charged):\n\n\"The service may change terms without notice. By continuing to use it, you accept updates. Personal data is processed to operate the service and may be shared with partners.\"\n\nCreate a new document and paste your own text or URL for a real analysis.",
+	},
 	"buy_intro": {
 		"ru": "Пакеты проверок (MVP — оплата вручную через администратора):",
 		"en": "Check packages (MVP — manual payment via admin):",
@@ -67,6 +83,7 @@ var messages = map[string]map[string]string{
 	"btn_highlights":    {"ru": "Подсветить риски", "en": "Highlight risks"},
 	"btn_balance":       {"ru": "Баланс", "en": "Balance"},
 	"btn_buy":           {"ru": "Купить проверки", "en": "Buy checks"},
+	"btn_demo":          {"ru": "Пример", "en": "Example"},
 	"btn_pkg_1":         {"ru": "1 проверка", "en": "1 check"},
 	"btn_pkg_3":         {"ru": "3 проверки", "en": "3 checks"},
 	"btn_pkg_10":        {"ru": "10 проверок", "en": "10 checks"},
