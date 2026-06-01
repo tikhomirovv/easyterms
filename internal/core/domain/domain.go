@@ -71,6 +71,30 @@ type DocumentSource struct {
 	CreatedAt  time.Time
 }
 
+// PurchaseStatus is payment attempt state.
+type PurchaseStatus string
+
+const (
+	PurchaseStatusPending   PurchaseStatus = "pending"
+	PurchaseStatusCompleted PurchaseStatus = "completed"
+	PurchaseStatusFailed    PurchaseStatus = "failed"
+	PurchaseStatusCancelled PurchaseStatus = "cancelled"
+)
+
+// Purchase is a payment attempt for a check package.
+type Purchase struct {
+	ID                uuid.UUID
+	UserID            uuid.UUID
+	ProviderID        string
+	PackageID         string
+	AmountCents       int
+	Currency          string
+	Status            PurchaseStatus
+	ExternalPaymentID *string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+}
+
 // LedgerEntry records a check balance change.
 type LedgerEntry struct {
 	ID         uuid.UUID

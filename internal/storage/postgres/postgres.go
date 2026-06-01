@@ -59,6 +59,10 @@ func (s *Store) Ledger() ports.LedgerRepository {
 	return &ledgerRepo{pool: s.pool}
 }
 
+func (s *Store) Purchases() ports.PurchaseRepository {
+	return &purchaseRepo{pool: s.pool}
+}
+
 func mapNotFound(err error) error {
 	if err == nil {
 		return nil

@@ -12,13 +12,19 @@ import (
 	"github.com/tikhomirovv/easyterms/internal/core/ports"
 )
 
+// Billing gates and records check consumption.
+type Billing interface {
+	HasChecks(ctx context.Context, userID uuid.UUID) (bool, error)
+	ConsumeCheck(ctx context.Context, userID, documentID uuid.UUID) error
+}
+
 // Service handles document use cases.
 type Service struct {
-	users    ports.UserRepository
-	docs     ports.DocumentRepository
-	sources  ports.DocumentSourceRepository
-	ledger   ports.LedgerRepository
-	llm      ports.LLMClient
+	users   ports.UserRepository
+	docs    ports.DocumentRepository
+	sources ports.DocumentSourceRepository
+	billing Billing
+	llm     ports.LLMClient
 }
 
 // NewService wires document operations.
@@ -26,14 +32,14 @@ func NewService(
 	users ports.UserRepository,
 	docs ports.DocumentRepository,
 	sources ports.DocumentSourceRepository,
-	ledger ports.LedgerRepository,
+	billing Billing,
 	llm ports.LLMClient,
 ) *Service {
 	return &Service{
 		users:   users,
 		docs:    docs,
 		sources: sources,
-		ledger:  ledger,
+		billing: billing,
 		llm:     llm,
 	}
 }
@@ -125,8 +131,14 @@ func (s *Service) Ingest(ctx context.Context, userID, documentID uuid.UUID) (*do
 	if err != nil {
 		return nil, err
 	}
-	if !doc.CheckConsumed && user.CheckBalance < 1 {
-		return nil, core.ErrInsufficientBalance
+	if !doc.CheckConsumed {
+		ok, err := s.billing.HasChecks(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, core.ErrInsufficientBalance
+		}
 	}
 
 	extractReq := buildExtractRequest(srcs, user.Locale, doc.ID.String())
@@ -142,17 +154,7 @@ func (s *Service) Ingest(ctx context.Context, userID, documentID uuid.UUID) (*do
 	doc.Status = domain.DocumentStatusIngested
 
 	if !doc.CheckConsumed {
-		user.CheckBalance--
-		if err := s.users.Update(ctx, user); err != nil {
-			return nil, err
-		}
-		docID := doc.ID
-		if err := s.ledger.Insert(ctx, &domain.LedgerEntry{
-			UserID:     userID,
-			DocumentID: &docID,
-			Delta:      -1,
-			Reason:     "document_ingest",
-		}); err != nil {
+		if err := s.billing.ConsumeCheck(ctx, userID, doc.ID); err != nil {
 			return nil, err
 		}
 		doc.CheckConsumed = true
