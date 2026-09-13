@@ -128,11 +128,13 @@ Env:
 
 Multi-stage: build `cmd/telegram` → minimal alpine runtime.
 
-```bash
-docker run --rm --env-file .env -v easyterms-data:/app/data easyterms:latest
-```
+**Release:** `.github/workflows/release.yml` — on git tag `v*`, push to `ghcr.io/tikhomirovv/easyterms` (`latest` + semver tags).
 
-Mount volume for `data/` when using default `DATABASE_PATH`.
+**Local / compose:** root `docker-compose.yml` — `env_file: .env`, volume `easyterms-data:/app/data`.
+
+```bash
+docker compose up -d
+```
 
 ## Тестирование
 

@@ -1,0 +1,25 @@
+# EasyTerms — minimal Docker Compose example
+#
+# Quick start:
+#   1. cp .env.example .env
+#   2. Fill TELEGRAM_BOT_TOKEN, LLM_API_KEY, ALLOWED_TELEGRAM_IDS (your Telegram user id)
+#   3. docker compose up -d
+#   4. docker compose logs -f
+#
+# Pre-built image is published to GHCR on every git tag (v*).
+# To build from source instead, comment out "image" and uncomment "build".
+
+services:
+  easyterms:
+    image: ghcr.io/tikhomirovv/easyterms:latest
+    # build: .
+    env_file:
+      - path: .env
+        required: false # create from .env.example before first run
+    volumes:
+      # SQLite file: default DATABASE_PATH=data/easyterms.db → /app/data/easyterms.db
+      - easyterms-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  easyterms-data:

@@ -95,6 +95,28 @@ go test ./...
 
 ## Docker
 
+### Готовый образ (рекомендуется)
+
+На каждый тег версии (`v*`) CI публикует публичный образ в [GitHub Container Registry](https://github.com/tikhomirovv/easyterms/pkgs/container/easyterms).
+
+```bash
+cp .env.example .env
+# заполните TELEGRAM_BOT_TOKEN, LLM_API_KEY, ALLOWED_TELEGRAM_IDS
+
+docker compose up -d
+docker compose logs -f
+```
+
+См. [`docker-compose.yml`](docker-compose.yml) — минимальный пример с комментариями. Зафиксируйте версию вместо `latest`:
+
+```yaml
+image: ghcr.io/tikhomirovv/easyterms:0.1.0
+```
+
+Первый образ появится после push тега в `main` (например `git tag v0.1.0 && git push origin v0.1.0`).
+
+### Сборка локально
+
 ```bash
 docker build -t easyterms:latest .
 docker run --rm --env-file .env -v easyterms-data:/app/data easyterms:latest

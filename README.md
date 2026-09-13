@@ -95,6 +95,28 @@ go test ./...
 
 ## Docker
 
+### Pre-built image (recommended)
+
+On every version tag (`v*`), CI publishes a public image to [GitHub Container Registry](https://github.com/tikhomirovv/easyterms/pkgs/container/easyterms).
+
+```bash
+cp .env.example .env
+# edit .env — TELEGRAM_BOT_TOKEN, LLM_API_KEY, ALLOWED_TELEGRAM_IDS
+
+docker compose up -d
+docker compose logs -f
+```
+
+See [`docker-compose.yml`](docker-compose.yml) — minimal example with comments. Pin a release instead of `latest`:
+
+```yaml
+image: ghcr.io/tikhomirovv/easyterms:0.1.0
+```
+
+The first image appears after you push a tag to `main` (e.g. `git tag v0.1.0 && git push origin v0.1.0`).
+
+### Build locally
+
 ```bash
 docker build -t easyterms:latest .
 docker run --rm --env-file .env -v easyterms-data:/app/data easyterms:latest
