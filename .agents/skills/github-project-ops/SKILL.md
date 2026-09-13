@@ -104,32 +104,11 @@ Important:
 
 ### EasyTerms execution order (reference)
 
-MVP (`MVP — Working Bot`):
+Current phase: **OSS — Personal Bot** (SQLite, no billing, self-hosted). Older MVP/v1 payment milestones are closed.
 
-| Issue | Blocked by | Notes |
-|-------|------------|-------|
-| #1 Scaffold | — | Start here; includes Dockerfile |
-| #2 CI | #1 | GitHub Actions: `go test` + `docker build`; merge gate |
-| #3 DB schema | #1 | |
-| #4 Repositories | #3 | |
-| #5 LLM port | #1 | Parallel with #3→#4 |
-| #6 Document service | #4, #5 | |
-| #7 Analysis modes | #6 | |
-| #9 Billing (stub) | #4 | Parallel with #6→#7 after repos |
-| #11 Telegram bot | #6, #7, #9 | Needs core + billing |
-| #13 URL ingest | #6 | |
-| #15 MVP polish | #7, #11, #13 | Last MVP task |
+For releases (tags, GitHub Release, GHCR image), use the **`release`** skill in `.agents/skills/release/` — not issue tracking.
 
-v1 (`v1 — Payments`):
-
-| Issue | Blocked by |
-|-------|------------|
-| #8 Cost research | #15 |
-| #10 YooKassa provider | #8 |
-| #12 Purchase UX | #10 |
-| #14 Real billing E2E | #12 |
-
-Update this table when the backlog changes.
+Update this section when the backlog changes.
 
 ## Authentication and Permissions
 

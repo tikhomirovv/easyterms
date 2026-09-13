@@ -13,18 +13,18 @@ For issue selection rules and dependency graphs, see the `github-project-ops` sk
 
 You are the implementer:
 
-- Read context, pick or accept one issue, implement it on a **dedicated branch**.
+- Read context, pick or accept one issue, implement it on a **dedicated branch** (or `main` when the user explicitly allows direct commits).
 - Ask **only blocking questions** — things you cannot infer from docs, the issue, or the codebase.
 - Stop and notify the user when work is **done** or **paused** (blocked, scope change, or awaiting human input).
 - Leave **brief issue comments** at key stages so progress is visible in GitHub, not only in chat.
-- End with a **pull request** — never merge unless the user explicitly asks.
+- **Merge PRs when implementation is complete** and CI is green — unless the user asks to wait for review.
 
 Do not reorganize the backlog, create new milestones, or rewrite `.docs/` unless the issue requires it.
 
 ## Workflow Overview
 
 ```
-Orient → Select issue → Branch → Implement → Verify → Notify → Pull request
+Orient → Select issue → Branch → Implement → Verify → Notify → Pull request → Merge
 ```
 
 Track progress with this checklist:
@@ -32,7 +32,7 @@ Track progress with this checklist:
 ```
 - [ ] Context read (.docs/ + issue + repo state)
 - [ ] Issue selected (specified or auto-picked)
-- [ ] Feature branch created and checked out
+- [ ] Feature branch created and checked out (unless direct-to-main allowed)
 - [ ] Acceptance criteria implemented
 - [ ] Tests added/updated (same change set)
 - [ ] `go test ./...` passes locally **or** CI checks green after push
@@ -40,6 +40,7 @@ Track progress with this checklist:
 - [ ] Key stages commented on the issue (see below)
 - [ ] User notified (done or paused)
 - [ ] Pull request opened (when implementation is complete)
+- [ ] PR merged and branch deleted (default)
 ```
 
 ## Step 1 — Orient
@@ -49,7 +50,7 @@ Before writing code:
 1. Read `.docs/` in order: `project-overview.md` → `prd.md` → `technical-design.md`.
 2. Inspect the repository — layout, existing packages, conventions, test patterns.
 3. Use `gh` to understand backlog state:
-   - Open issues for the active milestone (default: earliest incomplete milestone, usually MVP first).
+   - Open issues for the active milestone (default: earliest incomplete milestone).
    - Read the target issue body and acceptance criteria.
    - Check blockers: `gh api repos/OWNER/REPO/issues/N/dependencies/blocked_by --jq '.[].number'`
 
@@ -71,16 +72,16 @@ Discover listing/filter syntax via `gh issue list --help` at runtime.
 
 ## Step 3 — Branch
 
-**Always** create a new branch before implementation. Never commit implementation work directly on `main` / `master`.
+**Default:** create a new branch before implementation. Do not commit feature work directly on `main` unless the user explicitly allows it (e.g. small infra/docs/skills on `main`).
 
 1. Ensure a clean working tree (or stash only with user awareness).
-2. Branch from the default branch (`main` or `master`).
+2. Branch from the default branch (`main`).
 3. Naming: `issue/<number>-<short-slug>` — e.g. `issue/1-scaffold-monorepo`.
 4. Check out the branch; all commits for this issue stay here.
 
 ```bash
 git fetch origin
-git checkout main   # or master
+git checkout main
 git pull --ff-only
 git checkout -b issue/1-scaffold-monorepo
 ```
@@ -96,7 +97,7 @@ Follow the issue acceptance criteria and `.docs/technical-design.md`.
 - Match existing project conventions (structure, naming, error handling).
 - Keep changes scoped to the issue — no drive-by refactors.
 - Core business logic stays in `internal/core`; clients stay thin.
-- Use ports/interfaces for external dependencies (LLM, payments, storage) so core stays testable.
+- Use ports/interfaces for external dependencies (LLM, storage) so core stays testable.
 - Tests are **mandatory** for changed business logic — include them in the same change set, not a follow-up PR.
 
 ### Questions policy
@@ -118,33 +119,7 @@ Keep a lightweight paper trail on the issue via `gh issue comment N --body "..."
 | Started work / branch created | Yes | Branch name, brief plan |
 | Major milestone reached | Yes, if non-obvious | «Schema migration added», «LLM port wired» |
 | Blocked — need human input | **Required** | Question + what is already done + branch |
-| Done — PR opened | **Required** | Summary, PR link, test status |
-
-**When one comment is enough:** small, linear tasks — a single **final comment** with branch, PR link, and 2–4 bullets is fine.
-
-**When to add mid-task comments:** long or multi-step issues, blocked work, or after a milestone that would be hard to infer from the PR alone.
-
-**Blocked comment template:**
-
-```markdown
-⏸ **Paused** — need input
-
-**Branch:** `issue/N-slug`
-**Done so far:** [1–2 bullets]
-**Blocker:** [one focused question]
-```
-
-**Final comment template:**
-
-```markdown
-✅ **Ready for review**
-
-**Branch:** `issue/N-slug`
-**PR:** #M (or full URL)
-
-- [acceptance criterion → what was done]
-- Tests: `go test ./...` — pass
-```
+| Done — merged | **Required** | Summary, PR link, test status |
 
 Do not close the issue manually — let the PR (`Closes #N`) close it on merge.
 
@@ -166,10 +141,10 @@ Always stop and report when implementation is **complete** or **paused**. Mirror
 ### Done template
 
 ```markdown
-## Issue #N — ready for review
+## Issue #N — done
 
 **Branch:** `issue/N-slug`
-**PR:** [link]
+**PR:** [link] (merged)
 **Issue:** [title](link)
 
 ### Done
@@ -177,39 +152,16 @@ Always stop and report when implementation is **complete** or **paused**. Mirror
 
 ### Tests
 - `go test ./...` — pass
-
-### Next
-- Review the PR and diff
-- Run tests locally if you want
-- Request changes or merge when satisfied
 ```
 
-### Paused template
+## Step 7 — Pull Request and merge
 
-```markdown
-## Issue #N — paused
-
-**Branch:** `issue/N-slug` (WIP committed or uncommitted: state which)
-
-### Progress
-- [what is done]
-
-### Blocker
-- [single blocking question or external dependency]
-
-### Needed from you
-- [specific answer or action]
-```
-
-When implementation is complete and tests pass, **notify the user and open the PR in the same session** — the PR is the handoff artifact for review.
-
-## Step 7 — Pull Request
-
-Open a PR as soon as implementation is complete and tests pass. Do not leave work only on a branch without a PR unless paused or blocked.
+Open a PR as soon as implementation is complete and tests pass. Do not leave work only on a branch without a PR unless paused or blocked — **unless** committing directly to `main` with user approval.
 
 1. Commit on the feature branch with clear messages (user may ask for specific commit style).
 2. Push the branch: `git push -u origin issue/N-slug`
 3. Create the PR via `gh pr create` — discover flags via `--help`.
+4. When CI is green: `gh pr merge --merge --delete-branch` (default for this repo).
 
 PR body should include:
 
@@ -223,14 +175,11 @@ Closes #N
 ## Test plan
 - [ ] `go test ./...`
 - [ ] [manual steps if relevant]
-
-## Notes
-[optional: follow-ups, deferred items]
 ```
 
 Link the issue with `Closes #N` (or `Fixes #N`) so it auto-closes on merge.
 
-**Do not merge** unless the user explicitly requests it. The user reviews, runs tests, and may request changes.
+**Merge by default** when tests and CI pass. **Do not merge** only when the user explicitly asks to wait for review.
 
 ## Boundaries
 
@@ -242,10 +191,11 @@ Link the issue with `Closes #N` (or `Fixes #N`) so it auto-closes on merge.
 | Ask minimal blocking questions | Ask preference questions already answered in docs |
 | Add tests with feature code | Defer tests to a later PR |
 | Comment on issue at key stages | Dump verbose play-by-play on every commit |
-| Open PR at the end | Merge your own PR unless asked |
-| Commit on feature branch | Commit directly to main/master |
+| Merge when CI is green (default) | Leave branches open after merge |
+| Commit on feature branch | Commit feature work to main without user OK |
 
 ## Related Skills
 
 - **`project-docs`** — product and technical source of truth in `.docs/`
 - **`github-project-ops`** — backlog organization, dependencies, milestone structure
+- **`release`** — version tags and GitHub Releases (not issue implementation)

@@ -148,6 +148,10 @@ docker compose up -d
 
 CI (`.github/workflows/ci.yml`): `go test ./...` + `docker build`. No Postgres service.
 
+## Agent skills
+
+Portable agent workflows live in `.agents/skills/` (not `.cursor/`). Release procedure: skill `release` — tag `v*`, GitHub Release notes (English), GHCR image via CI.
+
 ## Инженерные правила
 
 - Core не импортирует Telegram SDK и concrete LLM HTTP client
