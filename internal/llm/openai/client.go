@@ -15,10 +15,12 @@ import (
 	"github.com/tikhomirovv/easyterms/internal/core/ports"
 )
 
+const jsonRetrySystem = "IMPORTANT: Return ONLY valid JSON matching the requested schema. No markdown, no commentary."
+
 // Client implements ports.LLMClient via an OpenAI-compatible HTTP API.
 type Client struct {
-	cfg    Config
-	http   *http.Client
+	cfg  Config
+	http *http.Client
 }
 
 // NewClient creates an LLM client. httpClient may be nil to use a default timeout.
@@ -33,12 +35,12 @@ func NewClient(cfg Config, httpClient *http.Client) *Client {
 func (c *Client) ExtractCleanText(ctx context.Context, req ports.ExtractRequest) (ports.ExtractResponse, error) {
 	system, user := prompts.ExtractMessages(req, "")
 	slog.Debug("llm: extract",
+		slog.String("provider", HostLabel(c.cfg.BaseURL)),
 		slog.String("model", c.cfg.Model),
 		slog.String("document_id", req.DocumentID),
 		slog.Int("user_chars", len(user)),
-		slog.Int("system_chars", len(system)),
 	)
-	content, err := c.chat(ctx, "extract", system, user, false)
+	content, err := c.chat(ctx, "extract", system, user)
 	if err != nil {
 		return ports.ExtractResponse{}, err
 	}
@@ -47,24 +49,43 @@ func (c *Client) ExtractCleanText(ctx context.Context, req ports.ExtractRequest)
 
 // Analyze calls the chat API for a structured analysis result (JSON payload).
 func (c *Client) Analyze(ctx context.Context, req ports.AnalyzeRequest) (ports.AnalyzeResponse, error) {
-	system, user, jsonMode := prompts.AnalyzeMessages(req, "")
+	system, user, _ := prompts.AnalyzeMessages(req, "")
 	slog.Debug("llm: analyze",
+		slog.String("provider", HostLabel(c.cfg.BaseURL)),
 		slog.String("model", c.cfg.Model),
 		slog.String("document_id", req.DocumentID),
 		slog.String("analysis_type", req.AnalysisType),
 		slog.Int("user_chars", len(user)),
-		slog.Bool("json_mode", jsonMode && c.cfg.JSONMode),
 	)
-	content, err := c.chat(ctx, "analyze", system, user, jsonMode)
+
+	content, err := c.chat(ctx, "analyze", system, user)
 	if err != nil {
 		return ports.AnalyzeResponse{}, err
 	}
-	content = strings.TrimSpace(content)
-	payload := extractJSONPayload(content)
-	if !json.Valid(payload) {
+	payload, err := parseAnalysisJSON(content)
+	if err == nil {
+		return ports.AnalyzeResponse{Payload: payload}, nil
+	}
+
+	slog.Debug("llm: analyze retry after invalid json", slog.String("document_id", req.DocumentID))
+	content, err = c.chat(ctx, "analyze-retry", system+"\n\n"+jsonRetrySystem, user)
+	if err != nil {
+		return ports.AnalyzeResponse{}, err
+	}
+	payload, err = parseAnalysisJSON(content)
+	if err != nil {
 		return ports.AnalyzeResponse{}, fmt.Errorf("llm: analyze response is not valid JSON")
 	}
 	return ports.AnalyzeResponse{Payload: payload}, nil
+}
+
+func parseAnalysisJSON(content string) ([]byte, error) {
+	content = strings.TrimSpace(content)
+	payload := extractJSONPayload(content)
+	if !json.Valid(payload) {
+		return nil, fmt.Errorf("invalid json")
+	}
+	return payload, nil
 }
 
 // extractJSONPayload returns JSON from raw model text (handles markdown fences from local models).
@@ -83,17 +104,13 @@ func extractJSONPayload(content string) []byte {
 	return []byte(content)
 }
 
-func (c *Client) chat(ctx context.Context, op, system, user string, jsonMode bool) (string, error) {
+func (c *Client) chat(ctx context.Context, op, system, user string) (string, error) {
 	body := chatRequest{
 		Model: c.cfg.Model,
 		Messages: []chatMessage{
 			{Role: "system", Content: system},
 			{Role: "user", Content: user},
 		},
-	}
-	useJSON := jsonMode && c.cfg.JSONMode
-	if useJSON {
-		body.ResponseFormat = &responseFormat{Type: "json_object"}
 	}
 
 	payload, err := json.Marshal(body)
@@ -107,7 +124,6 @@ func (c *Client) chat(ctx context.Context, op, system, user string, jsonMode boo
 		slog.String("url", url),
 		slog.String("model", c.cfg.Model),
 		slog.Int("payload_bytes", len(payload)),
-		slog.Bool("json_object", useJSON),
 	)
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
@@ -149,9 +165,4 @@ func truncate(s string, max int) string {
 		return s
 	}
 	return s[:max] + "..."
-}
-
-// ProviderLabel returns the configured provider name for logging and metadata.
-func (c *Client) ProviderLabel() string {
-	return c.cfg.ProviderLabel
 }

@@ -6,44 +6,45 @@ import (
 	"github.com/tikhomirovv/easyterms/internal/llm/openai"
 )
 
-func TestLoadConfig_openAIRequiresKey(t *testing.T) {
+func TestLoadConfig_defaults(t *testing.T) {
 	t.Setenv("LLM_BASE_URL", "https://api.openai.com/v1")
-	t.Setenv("LLM_API_KEY", "")
-	_, err := openai.LoadConfig()
-	if err == nil {
-		t.Fatal("expected error without API key for OpenAI cloud")
+	t.Setenv("LLM_API_KEY", "sk-test")
+	t.Setenv("LLM_MODEL", "")
+
+	cfg, err := openai.LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Model != "gpt-5.6-luna" {
+		t.Fatalf("model = %q", cfg.Model)
 	}
 }
 
-func TestLoadConfig_localPlaceholderKey(t *testing.T) {
-	t.Setenv("LLM_BASE_URL", "http://100.64.0.7:1234/v1")
+func TestHostLabel(t *testing.T) {
+	if openai.HostLabel("https://api.openai.com/v1") != "api.openai.com" {
+		t.Fatal("unexpected host label")
+	}
+}
+
+func TestLoadConfig_localPlaceholder(t *testing.T) {
+	t.Setenv("LLM_BASE_URL", "http://127.0.0.1:1234/v1")
 	t.Setenv("LLM_API_KEY", "")
-	t.Setenv("LLM_MODEL", "qwen/qwen3.6-27b")
-	t.Setenv("LLM_JSON_MODE", "false")
 
 	cfg, err := openai.LoadConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cfg.APIKey != "local" {
-		t.Fatalf("APIKey = %q, want local placeholder", cfg.APIKey)
-	}
-	if cfg.JSONMode {
-		t.Fatal("expected JSONMode false")
-	}
-	if cfg.Model != "qwen/qwen3.6-27b" {
-		t.Fatalf("model = %q", cfg.Model)
+		t.Fatalf("api key = %q", cfg.APIKey)
 	}
 }
 
-func TestLoadConfig_customKeyPreserved(t *testing.T) {
-	t.Setenv("LLM_BASE_URL", "http://127.0.0.1:1234/v1")
-	t.Setenv("LLM_API_KEY", "lm-studio")
-	cfg, err := openai.LoadConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.APIKey != "lm-studio" {
-		t.Fatalf("APIKey = %q", cfg.APIKey)
+func TestLoadConfig_missingKeyForOpenAI(t *testing.T) {
+	t.Setenv("LLM_BASE_URL", "https://api.openai.com/v1")
+	t.Setenv("LLM_API_KEY", "")
+
+	_, err := openai.LoadConfig()
+	if err == nil {
+		t.Fatal("expected error")
 	}
 }

@@ -9,12 +9,16 @@ import (
 
 func TestLoad_defaults(t *testing.T) {
 	t.Setenv("LOG_LEVEL", "")
+	t.Setenv("DATABASE_PATH", "")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 	if cfg.LogLevel != "info" {
 		t.Errorf("LogLevel = %q, want info", cfg.LogLevel)
+	}
+	if cfg.DatabasePath != DefaultDatabasePath {
+		t.Errorf("DatabasePath = %q", cfg.DatabasePath)
 	}
 }
 
@@ -42,8 +46,8 @@ func TestNewLogger_levels(t *testing.T) {
 func TestLoad_fromDotEnv(t *testing.T) {
 	dir := t.TempDir()
 	envPath := filepath.Join(dir, ".env")
-	const wantDB = "postgres://dotenv:test@localhost/easyterms?sslmode=disable"
-	content := "LOG_LEVEL=debug\nDATABASE_URL=" + wantDB + "\n"
+	const wantDB = "data/test.db"
+	content := "LOG_LEVEL=debug\nDATABASE_PATH=" + wantDB + "\nALLOWED_TELEGRAM_IDS=42,99\n"
 	if err := os.WriteFile(envPath, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +60,8 @@ func TestLoad_fromDotEnv(t *testing.T) {
 	}
 	defer func() { _ = os.Chdir(wd) }()
 	os.Unsetenv("LOG_LEVEL")
-	os.Unsetenv("DATABASE_URL")
+	os.Unsetenv("DATABASE_PATH")
+	os.Unsetenv("ALLOWED_TELEGRAM_IDS")
 
 	cfg, err := Load()
 	if err != nil {
@@ -65,8 +70,11 @@ func TestLoad_fromDotEnv(t *testing.T) {
 	if cfg.LogLevel != "debug" {
 		t.Errorf("LogLevel = %q, want debug", cfg.LogLevel)
 	}
-	if cfg.DatabaseURL != wantDB {
-		t.Errorf("DatabaseURL = %q", cfg.DatabaseURL)
+	if cfg.DatabasePath != wantDB {
+		t.Errorf("DatabasePath = %q", cfg.DatabasePath)
+	}
+	if len(cfg.AllowedTelegramIDs) != 2 || cfg.AllowedTelegramIDs[0] != 42 {
+		t.Fatalf("ids = %v", cfg.AllowedTelegramIDs)
 	}
 }
 

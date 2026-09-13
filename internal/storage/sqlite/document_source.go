@@ -1,34 +1,41 @@
-package postgres
+package sqlite
 
 import (
 	"context"
+	"database/sql"
+	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tikhomirovv/easyterms/internal/core/domain"
 )
 
 type documentSourceRepo struct {
-	pool *pgxpool.Pool
+	db *sql.DB
 }
 
 func (r *documentSourceRepo) Create(ctx context.Context, source *domain.DocumentSource) error {
+	if source.ID == uuid.Nil {
+		source.ID = uuid.New()
+	}
+	now := time.Now().UTC()
+	source.CreatedAt = now
 	const q = `
-		INSERT INTO document_sources (document_id, kind, content, source_url, sequence)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id, created_at`
-	return r.pool.QueryRow(ctx, q,
-		source.DocumentID, string(source.Kind), source.Content, source.SourceURL, source.Sequence,
-	).Scan(&source.ID, &source.CreatedAt)
+		INSERT INTO document_sources (id, document_id, kind, content, source_url, sequence, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`
+	_, err := r.db.ExecContext(ctx, q,
+		source.ID.String(), source.DocumentID.String(), string(source.Kind),
+		source.Content, source.SourceURL, source.Sequence, formatTime(now),
+	)
+	return err
 }
 
 func (r *documentSourceRepo) ListByDocument(ctx context.Context, documentID uuid.UUID) ([]domain.DocumentSource, error) {
 	const q = `
 		SELECT id, document_id, kind, content, source_url, sequence, created_at
 		FROM document_sources
-		WHERE document_id = $1
+		WHERE document_id = ?
 		ORDER BY sequence ASC, created_at ASC`
-	rows, err := r.pool.Query(ctx, q, documentID)
+	rows, err := r.db.QueryContext(ctx, q, documentID.String())
 	if err != nil {
 		return nil, err
 	}
@@ -37,13 +44,16 @@ func (r *documentSourceRepo) ListByDocument(ctx context.Context, documentID uuid
 	var out []domain.DocumentSource
 	for rows.Next() {
 		var s domain.DocumentSource
-		var kind string
+		var idStr, docIDStr, kind, createdAt string
 		if err := rows.Scan(
-			&s.ID, &s.DocumentID, &kind, &s.Content, &s.SourceURL, &s.Sequence, &s.CreatedAt,
+			&idStr, &docIDStr, &kind, &s.Content, &s.SourceURL, &s.Sequence, &createdAt,
 		); err != nil {
 			return nil, err
 		}
+		s.ID = uuid.MustParse(idStr)
+		s.DocumentID = uuid.MustParse(docIDStr)
 		s.Kind = domain.SourceKind(kind)
+		s.CreatedAt = parseTime(createdAt)
 		out = append(out, s)
 	}
 	return out, rows.Err()

@@ -29,10 +29,9 @@ func TestExtractCleanText(t *testing.T) {
 	defer srv.Close()
 
 	client := openai.NewClient(openai.Config{
-		BaseURL:  srv.URL + "/v1",
-		APIKey:   "test-key",
-		Model:    "test-model",
-		JSONMode: true,
+		BaseURL: srv.URL + "/v1",
+		APIKey:  "test-key",
+		Model:   "test-model",
 	}, srv.Client())
 
 	resp, err := client.ExtractCleanText(context.Background(), ports.ExtractRequest{
@@ -51,14 +50,17 @@ func TestExtractCleanText(t *testing.T) {
 	if gotBody.Model != "test-model" {
 		t.Fatalf("model = %q", gotBody.Model)
 	}
+	if gotBody.ResponseFormat != nil {
+		t.Fatal("expected no response_format on extract")
+	}
 }
 
 func TestAnalyze_JSONPayload(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body chatRequest
 		_ = json.NewDecoder(r.Body).Decode(&body)
-		if body.ResponseFormat == nil || body.ResponseFormat.Type != "json_object" {
-			t.Fatal("expected json_object response format")
+		if body.ResponseFormat != nil {
+			t.Fatal("expected no response_format")
 		}
 		_ = json.NewEncoder(w).Encode(chatResponse{
 			Choices: []chatChoice{{
@@ -69,10 +71,9 @@ func TestAnalyze_JSONPayload(t *testing.T) {
 	defer srv.Close()
 
 	client := openai.NewClient(openai.Config{
-		BaseURL:  srv.URL + "/v1",
-		APIKey:   "key",
-		Model:    "m",
-		JSONMode: true,
+		BaseURL: srv.URL + "/v1",
+		APIKey:  "key",
+		Model:   "m",
 	}, srv.Client())
 
 	resp, err := client.Analyze(context.Background(), ports.AnalyzeRequest{
@@ -89,6 +90,79 @@ func TestAnalyze_JSONPayload(t *testing.T) {
 		t.Fatalf("payload: %v", err)
 	}
 	if parsed["summary"] != "Simple explanation." {
+		t.Fatalf("summary = %q", parsed["summary"])
+	}
+}
+
+func TestAnalyze_retriesOnInvalidJSON(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		content := "not json"
+		if calls > 1 {
+			content = `{"summary":"ok"}`
+		}
+		_ = json.NewEncoder(w).Encode(chatResponse{
+			Choices: []chatChoice{{Message: chatMessage{Content: content}}},
+		})
+	}))
+	defer srv.Close()
+
+	client := openai.NewClient(openai.Config{
+		BaseURL: srv.URL + "/v1",
+		APIKey:  "key",
+		Model:   "m",
+	}, srv.Client())
+
+	resp, err := client.Analyze(context.Background(), ports.AnalyzeRequest{
+		CleanText:    "text",
+		AnalysisType: "plain",
+		Locale:       "en",
+	})
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("calls = %d, want 2", calls)
+	}
+	var parsed map[string]string
+	if err := json.Unmarshal(resp.Payload, &parsed); err != nil {
+		t.Fatal(err)
+	}
+	if parsed["summary"] != "ok" {
+		t.Fatalf("summary = %q", parsed["summary"])
+	}
+}
+
+func TestAnalyze_markdownFence(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(chatResponse{
+			Choices: []chatChoice{{
+				Message: chatMessage{Content: "```json\n{\"summary\":\"ok\"}\n```"},
+			}},
+		})
+	}))
+	defer srv.Close()
+
+	client := openai.NewClient(openai.Config{
+		BaseURL: srv.URL + "/v1",
+		APIKey:  "local",
+		Model:   "m",
+	}, srv.Client())
+
+	resp, err := client.Analyze(context.Background(), ports.AnalyzeRequest{
+		CleanText:    "text",
+		AnalysisType: "plain",
+		Locale:       "en",
+	})
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	var parsed map[string]string
+	if err := json.Unmarshal(resp.Payload, &parsed); err != nil {
+		t.Fatalf("payload: %v", err)
+	}
+	if parsed["summary"] != "ok" {
 		t.Fatalf("summary = %q", parsed["summary"])
 	}
 }
@@ -112,46 +186,6 @@ func TestChat_APIErrorStatus(t *testing.T) {
 	}
 }
 
-func TestAnalyze_withoutJSONMode(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var body chatRequest
-		_ = json.NewDecoder(r.Body).Decode(&body)
-		if body.ResponseFormat != nil {
-			t.Fatal("expected no response_format when JSONMode disabled")
-		}
-		_ = json.NewEncoder(w).Encode(chatResponse{
-			Choices: []chatChoice{{
-				Message: chatMessage{Content: "```json\n{\"summary\":\"ok\"}\n```"},
-			}},
-		})
-	}))
-	defer srv.Close()
-
-	client := openai.NewClient(openai.Config{
-		BaseURL:  srv.URL + "/v1",
-		APIKey:   "local",
-		Model:    "m",
-		JSONMode: false,
-	}, srv.Client())
-
-	resp, err := client.Analyze(context.Background(), ports.AnalyzeRequest{
-		CleanText:    "text",
-		AnalysisType: "plain",
-		Locale:       "en",
-	})
-	if err != nil {
-		t.Fatalf("Analyze: %v", err)
-	}
-	var parsed map[string]string
-	if err := json.Unmarshal(resp.Payload, &parsed); err != nil {
-		t.Fatalf("payload: %v", err)
-	}
-	if parsed["summary"] != "ok" {
-		t.Fatalf("summary = %q", parsed["summary"])
-	}
-}
-
-// Mirror chat types for decoding request bodies in tests (avoid exporting internals).
 type chatRequest struct {
 	Model          string          `json:"model"`
 	Messages       []chatMessage   `json:"messages"`

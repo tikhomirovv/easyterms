@@ -20,10 +20,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "config: %v\n", err)
 		os.Exit(1)
 	}
-	if cfg.DatabaseURL == "" {
-		fmt.Fprintln(os.Stderr, "DATABASE_URL is required")
-		os.Exit(1)
-	}
 
 	log, err := cfg.NewLogger()
 	if err != nil {
@@ -34,9 +30,9 @@ func main() {
 
 	switch *direction {
 	case "up":
-		err = migrate.Up(cfg.DatabaseURL)
+		err = migrate.Up(cfg.DatabasePath)
 	case "down":
-		err = migrate.Down(cfg.DatabaseURL)
+		err = migrate.Down(cfg.DatabasePath)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown direction %q\n", *direction)
 		os.Exit(1)
@@ -45,5 +41,5 @@ func main() {
 		slog.Error("migration failed", slog.String("direction", *direction), slog.String("error", err.Error()))
 		os.Exit(1)
 	}
-	slog.Info("migration complete", slog.String("direction", *direction))
+	slog.Info("migration complete", slog.String("direction", *direction), slog.String("database_path", cfg.DatabasePath))
 }

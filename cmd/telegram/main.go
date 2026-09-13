@@ -11,11 +11,11 @@ import (
 
 	"github.com/tikhomirovv/easyterms/internal/core/config"
 	"github.com/tikhomirovv/easyterms/internal/core/services/analysis"
-	"github.com/tikhomirovv/easyterms/internal/core/services/billing"
 	"github.com/tikhomirovv/easyterms/internal/core/services/document"
 	"github.com/tikhomirovv/easyterms/internal/llm"
-	"github.com/tikhomirovv/easyterms/internal/payment/manual"
-	"github.com/tikhomirovv/easyterms/internal/storage/postgres"
+	"github.com/tikhomirovv/easyterms/internal/llm/openai"
+	"github.com/tikhomirovv/easyterms/internal/storage/migrate"
+	"github.com/tikhomirovv/easyterms/internal/storage/sqlite"
 	"github.com/tikhomirovv/easyterms/internal/telegram"
 )
 
@@ -37,9 +37,6 @@ func run(ctx context.Context) error {
 	if cfg.TelegramBotToken == "" {
 		return fmt.Errorf("TELEGRAM_BOT_TOKEN is required")
 	}
-	if cfg.DatabaseURL == "" {
-		return fmt.Errorf("DATABASE_URL is required")
-	}
 
 	log, err := cfg.NewLogger()
 	if err != nil {
@@ -47,28 +44,40 @@ func run(ctx context.Context) error {
 	}
 	slog.SetDefault(log)
 
+	if err := migrate.Up(cfg.DatabasePath); err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	}
+
 	llmClient, err := llm.NewClientFromEnv()
 	if err != nil {
 		return fmt.Errorf("llm: %w", err)
 	}
+	llmCfg, _ := openai.LoadConfig()
 	log.Info("llm configured",
-		slog.String("provider", os.Getenv("LLM_PROVIDER")),
-		slog.String("base_url", os.Getenv("LLM_BASE_URL")),
-		slog.String("model", os.Getenv("LLM_MODEL")),
-		slog.String("json_mode", os.Getenv("LLM_JSON_MODE")),
+		slog.String("provider", openai.HostLabel(llmCfg.BaseURL)),
+		slog.String("base_url", llmCfg.BaseURL),
+		slog.String("model", llmCfg.Model),
 	)
 
-	store, err := postgres.NewStore(ctx, cfg.DatabaseURL)
+	if cfg.AllowlistOpen() {
+		log.Warn("SECURITY: ALLOWED_TELEGRAM_IDS is empty — bot is PUBLIC; anyone can use your LLM API key. Set ALLOWED_TELEGRAM_IDS for self-hosted use.")
+	} else {
+		log.Info("telegram allowlist enabled", slog.Int("allowed_users", len(cfg.AllowedTelegramIDs)))
+	}
+
+	store, err := sqlite.NewStore(cfg.DatabasePath)
 	if err != nil {
-		return fmt.Errorf("postgres: %w", err)
+		return fmt.Errorf("sqlite: %w", err)
 	}
 	defer store.Close()
 
-	bill := billing.NewService(store.Users(), store.Ledger(), store.Purchases(), manual.NewProvider())
-	docs := document.NewService(store.Users(), store.Documents(), store.DocumentSources(), bill, llmClient)
+	docs := document.NewService(store.Users(), store.Documents(), store.DocumentSources(), llmClient)
 	analyze := analysis.NewService(store.Users(), store.Documents(), store.AnalysisResults(), llmClient)
 
-	app := telegram.NewApp(store.Users(), docs, bill, analyze, log)
-	log.Info("easyterms telegram starting", slog.String("log_level", cfg.LogLevel))
+	app := telegram.NewApp(store.Users(), docs, analyze, telegram.NewAllowlist(cfg.AllowedTelegramIDs), log)
+	log.Info("easyterms telegram starting",
+		slog.String("log_level", cfg.LogLevel),
+		slog.String("database_path", cfg.DatabasePath),
+	)
 	return telegram.Run(ctx, cfg.TelegramBotToken, app)
 }

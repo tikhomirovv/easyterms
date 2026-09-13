@@ -112,10 +112,9 @@ func (r *memResults) GetByDocumentAndType(_ context.Context, docID uuid.UUID, t 
 func ingestedDoc(userID uuid.UUID) *domain.Document {
 	clean := "Terms and conditions apply."
 	return &domain.Document{
-		UserID:        userID,
-		Status:        domain.DocumentStatusIngested,
-		CheckConsumed: true,
-		CleanText:     &clean,
+		UserID:    userID,
+		Status:    domain.DocumentStatusIngested,
+		CleanText: &clean,
 	}
 }
 

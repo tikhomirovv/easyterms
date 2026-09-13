@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/tikhomirovv/easyterms/internal/core"
 	"github.com/tikhomirovv/easyterms/internal/core/domain"
 	"github.com/tikhomirovv/easyterms/internal/core/ports"
 	"github.com/tikhomirovv/easyterms/internal/core/services/document"
@@ -24,10 +23,9 @@ func (m *mockLLM) Analyze(ctx context.Context, req ports.AnalyzeRequest) (ports.
 }
 
 type memStore struct {
-	users    map[uuid.UUID]*domain.User
-	docs     map[uuid.UUID]*domain.Document
-	sources  []domain.DocumentSource
-	ledger   []domain.LedgerEntry
+	users   map[uuid.UUID]*domain.User
+	docs    map[uuid.UUID]*domain.Document
+	sources []domain.DocumentSource
 }
 
 func newMemStore() *memStore {
@@ -37,10 +35,9 @@ func newMemStore() *memStore {
 	}
 }
 
-func (m *memStore) userRepo() ports.UserRepository       { return &memUsers{m} }
-func (m *memStore) docRepo() ports.DocumentRepository    { return &memDocs{m} }
+func (m *memStore) userRepo() ports.UserRepository            { return &memUsers{m} }
+func (m *memStore) docRepo() ports.DocumentRepository         { return &memDocs{m} }
 func (m *memStore) sourceRepo() ports.DocumentSourceRepository { return &memSources{m} }
-func (m *memStore) ledgerRepo() ports.LedgerRepository   { return &memLedger{m} }
 
 type memUsers struct{ m *memStore }
 
@@ -112,61 +109,10 @@ func (r *memSources) ListByDocument(ctx context.Context, documentID uuid.UUID) (
 	return out, nil
 }
 
-type memLedger struct{ m *memStore }
-
-func (r *memLedger) Insert(ctx context.Context, e *domain.LedgerEntry) error {
-	e.ID = uuid.New()
-	r.m.ledger = append(r.m.ledger, *e)
-	return nil
-}
-func (r *memLedger) ListByUser(ctx context.Context, userID uuid.UUID, limit int) ([]domain.LedgerEntry, error) {
-	return nil, nil
-}
-func (r *memLedger) ExistsByReason(_ context.Context, userID uuid.UUID, reason string) (bool, error) {
-	for _, e := range r.m.ledger {
-		if e.UserID == userID && e.Reason == reason {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-type memBilling struct {
-	users  *memUsers
-	ledger *memLedger
-}
-
-func (b *memBilling) HasChecks(ctx context.Context, userID uuid.UUID) (bool, error) {
-	u, err := b.users.GetByID(ctx, userID)
-	if err != nil {
-		return false, err
-	}
-	return u.CheckBalance > 0, nil
-}
-func (b *memBilling) ConsumeCheck(ctx context.Context, userID, documentID uuid.UUID) error {
-	reason := "document_ingest:" + documentID.String()
-	ok, _ := b.ledger.ExistsByReason(ctx, userID, reason)
-	if ok {
-		return nil
-	}
-	u, err := b.users.GetByID(ctx, userID)
-	if err != nil {
-		return err
-	}
-	if u.CheckBalance < 1 {
-		return core.ErrInsufficientBalance
-	}
-	u.CheckBalance--
-	_ = b.users.Update(ctx, u)
-	return b.ledger.Insert(ctx, &domain.LedgerEntry{
-		UserID: userID, DocumentID: &documentID, Delta: -1, Reason: reason,
-	})
-}
-
-func TestDocumentService_ingestConsumesCheckOnce(t *testing.T) {
+func TestDocumentService_ingestOnce(t *testing.T) {
 	ctx := context.Background()
 	mem := newMemStore()
-	user := &domain.User{TelegramID: 1, Locale: "en", CheckBalance: 1}
+	user := &domain.User{TelegramID: 1, Locale: "en"}
 	_ = mem.userRepo().Create(ctx, user)
 
 	llmCalls := 0
@@ -176,8 +122,7 @@ func TestDocumentService_ingestConsumesCheckOnce(t *testing.T) {
 			return ports.ExtractResponse{CleanText: "Clean agreement text."}, nil
 		},
 	}
-	bill := &memBilling{users: &memUsers{mem}, ledger: &memLedger{mem}}
-	svc := document.NewService(mem.userRepo(), mem.docRepo(), mem.sourceRepo(), bill, llm)
+	svc := document.NewService(mem.userRepo(), mem.docRepo(), mem.sourceRepo(), llm)
 
 	doc, err := svc.CreateDocument(ctx, user.ID)
 	if err != nil {
@@ -191,22 +136,13 @@ func TestDocumentService_ingestConsumesCheckOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ingest: %v", err)
 	}
-	if ingested.Status != domain.DocumentStatusIngested || !ingested.CheckConsumed {
+	if ingested.Status != domain.DocumentStatusIngested {
 		t.Fatalf("doc = %+v", ingested)
 	}
 	if llmCalls != 1 {
 		t.Fatalf("llm calls = %d", llmCalls)
 	}
 
-	u, _ := mem.userRepo().GetByID(ctx, user.ID)
-	if u.CheckBalance != 0 {
-		t.Fatalf("balance = %d", u.CheckBalance)
-	}
-	if len(mem.ledger) != 1 || mem.ledger[0].Delta != -1 || mem.ledger[0].Reason == "" {
-		t.Fatalf("ledger = %+v", mem.ledger)
-	}
-
-	// Second ingest must not call LLM or charge again.
 	_, err = svc.Ingest(ctx, user.ID, doc.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -216,34 +152,12 @@ func TestDocumentService_ingestConsumesCheckOnce(t *testing.T) {
 	}
 }
 
-func TestDocumentService_insufficientBalance(t *testing.T) {
-	ctx := context.Background()
-	mem := newMemStore()
-	user := &domain.User{TelegramID: 2, Locale: "en", CheckBalance: 0}
-	_ = mem.userRepo().Create(ctx, user)
-
-	bill := &memBilling{users: &memUsers{mem}, ledger: &memLedger{mem}}
-	svc := document.NewService(mem.userRepo(), mem.docRepo(), mem.sourceRepo(), bill, &mockLLM{
-		extract: func(ctx context.Context, req ports.ExtractRequest) (ports.ExtractResponse, error) {
-			return ports.ExtractResponse{CleanText: "x"}, nil
-		},
-	})
-	doc, _ := svc.CreateDocument(ctx, user.ID)
-	_ = svc.AddTextSource(ctx, user.ID, doc.ID, "text")
-
-	_, err := svc.Ingest(ctx, user.ID, doc.ID)
-	if err != core.ErrInsufficientBalance {
-		t.Fatalf("err = %v", err)
-	}
-}
-
 func TestDocumentService_listHistory(t *testing.T) {
 	ctx := context.Background()
 	mem := newMemStore()
-	user := &domain.User{TelegramID: 3, Locale: "ru", CheckBalance: 5}
+	user := &domain.User{TelegramID: 3, Locale: "ru"}
 	_ = mem.userRepo().Create(ctx, user)
-	bill := &memBilling{users: &memUsers{mem}, ledger: &memLedger{mem}}
-	svc := document.NewService(mem.userRepo(), mem.docRepo(), mem.sourceRepo(), bill, &mockLLM{})
+	svc := document.NewService(mem.userRepo(), mem.docRepo(), mem.sourceRepo(), &mockLLM{})
 
 	_, _ = svc.CreateDocument(ctx, user.ID)
 	_, _ = svc.CreateDocument(ctx, user.ID)
@@ -268,7 +182,7 @@ func (f stubURLFetcher) FetchText(context.Context, string) (string, error) {
 func TestDocumentService_ingestURLSource(t *testing.T) {
 	ctx := context.Background()
 	mem := newMemStore()
-	user := &domain.User{TelegramID: 4, Locale: "en", CheckBalance: 1}
+	user := &domain.User{TelegramID: 4, Locale: "en"}
 	_ = mem.userRepo().Create(ctx, user)
 
 	var gotRaw string
@@ -278,9 +192,8 @@ func TestDocumentService_ingestURLSource(t *testing.T) {
 			return ports.ExtractResponse{CleanText: "clean"}, nil
 		},
 	}
-	bill := &memBilling{users: &memUsers{mem}, ledger: &memLedger{mem}}
 	svc := document.NewServiceWithURLFetcher(
-		mem.userRepo(), mem.docRepo(), mem.sourceRepo(), bill,
+		mem.userRepo(), mem.docRepo(), mem.sourceRepo(),
 		stubURLFetcher{text: "fetched page text"},
 		llm,
 	)
