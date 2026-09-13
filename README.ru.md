@@ -1,0 +1,105 @@
+[English](README.md)
+
+# EasyTerms
+
+Self-hosted Telegram-бот: помогает **понять пользовательские соглашения** (Terms, Privacy, EULA и т.п.) до нажатия «Принять». Создаёте документ, отправляете текст или ссылку — получаете простое объяснение и подсветку рисков.
+
+**Не юридическая консультация** — только информационная помощь.
+
+## Стек
+
+- Go 1.23+, **SQLite** (встроенная БД, без отдельного сервера)
+- [go-telegram/bot](https://github.com/go-telegram/bot)
+- LLM через **OpenAI-compatible HTTP API** (OpenAI, OpenRouter, LM Studio, …)
+- CI: `go test` + Docker на GitHub Actions
+
+Подробнее: [`.docs/`](.docs/).
+
+## Быстрый старт
+
+```bash
+git clone https://github.com/tikhomirovv/easyterms.git
+cd easyterms
+
+cp .env.example .env
+# заполните .env — минимум TELEGRAM_BOT_TOKEN, LLM_API_KEY, ALLOWED_TELEGRAM_IDS
+
+go run ./cmd/telegram
+```
+
+Запускайте из **корня репозитория** — `.env` подхватится автоматически.
+
+Миграции применяются при старте бота. Вручную:
+
+```bash
+go run ./cmd/migrate -direction up
+```
+
+## Конфигурация
+
+| Переменная | Назначение |
+|------------|------------|
+| `LOG_LEVEL` | `debug` / `info` / `warn` / `error` (по умолчанию `info`) |
+| `DATABASE_PATH` | Путь к файлу SQLite (по умолчанию `data/easyterms.db`) |
+| `TELEGRAM_BOT_TOKEN` | Токен от [@BotFather](https://t.me/BotFather) |
+| `ALLOWED_TELEGRAM_IDS` | Telegram ID через запятую; **пусто = публичный бот** (warning в логах) |
+| `LLM_BASE_URL` | URL API |
+| `LLM_API_KEY` | Ключ API |
+| `LLM_MODEL` | Имя модели |
+
+### Примеры LLM
+
+**OpenAI**
+
+```env
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_API_KEY=sk-...
+LLM_MODEL=gpt-5.6-luna
+```
+
+**OpenRouter**
+
+```env
+LLM_BASE_URL=https://openrouter.ai/api/v1
+LLM_API_KEY=...
+LLM_MODEL=deepseek/deepseek-v4-flash-0731
+```
+
+**LM Studio (локально)**
+
+```env
+LLM_BASE_URL=http://127.0.0.1:1234/v1
+LLM_API_KEY=lm-studio
+LLM_MODEL=google/gemma-3-12b-it
+```
+
+### Рекомендуемые модели (только примеры)
+
+Это **ориентиры**, не гарантия — цены и качество меняются; проверяйте у своего провайдера:
+
+- **GPT-5.6 Luna** — OpenAI, хорош для summary
+- **DeepSeek V4 Flash** — дёшево через OpenRouter / DeepSeek
+- **Gemma 4** (12B / E4B) — open weights, локально или в облаке
+
+## Сценарий в боте
+
+`/start` → **Новый документ** → текст или URL → **Готово к разбору** → **Объяснить просто** / **Подсветить риски**
+
+`/demo` — статичный пример.
+
+## Тесты
+
+```bash
+go test ./...
+```
+
+## Docker
+
+```bash
+docker build -t easyterms:latest .
+docker run --rm --env-file .env -v easyterms-data:/app/data easyterms:latest
+```
+
+## Лицензия
+
+MIT — см. [LICENSE](LICENSE).

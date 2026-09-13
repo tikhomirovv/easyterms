@@ -22,8 +22,13 @@ RUN apk add --no-cache ca-certificates \
 
 WORKDIR /app
 
+# Default DATABASE_PATH=data/easyterms.db — mount a volume on /app/data in production.
+RUN mkdir -p /app/data && chown app:app /app/data
+
 COPY --from=builder /out/telegram /app/telegram
 
 USER app
+
+VOLUME ["/app/data"]
 
 ENTRYPOINT ["/app/telegram"]

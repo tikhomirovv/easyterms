@@ -18,7 +18,7 @@ type ExtractRequest struct {
 	URL string
 	// Locale is the user's language (e.g. Telegram language code).
 	Locale string
-	// DocumentID links the request to a document for logging and billing.
+	// DocumentID links the request to a document for logging.
 	DocumentID string
 }
 

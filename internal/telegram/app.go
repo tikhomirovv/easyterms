@@ -13,31 +13,32 @@ import (
 	"github.com/tikhomirovv/easyterms/internal/core"
 	"github.com/tikhomirovv/easyterms/internal/core/domain"
 	"github.com/tikhomirovv/easyterms/internal/core/ports"
-	"github.com/tikhomirovv/easyterms/internal/core/services/analysis"
-	"github.com/tikhomirovv/easyterms/internal/core/services/billing"
 	"github.com/tikhomirovv/easyterms/internal/core/services/document"
-	"github.com/tikhomirovv/easyterms/internal/payment/manual"
 	"github.com/tikhomirovv/easyterms/internal/telegram/i18n"
 )
 
 // App wires Telegram handlers to core services.
 type App struct {
-	users    ports.UserRepository
-	docs     *document.Service
-	billing  *billing.Service
-	analysis *analysis.Service
-	log      *slog.Logger
+	users     ports.UserRepository
+	docs      *document.Service
+	analysis  analysisRunner
+	allowlist Allowlist
+	log       *slog.Logger
+}
+
+type analysisRunner interface {
+	Run(ctx context.Context, userID, documentID uuid.UUID, analysisType string) (*domain.AnalysisResult, error)
 }
 
 // NewApp constructs the handler app.
 func NewApp(
 	users ports.UserRepository,
 	docs *document.Service,
-	bill *billing.Service,
-	analyze *analysis.Service,
+	analyze analysisRunner,
+	allowlist Allowlist,
 	log *slog.Logger,
 ) *App {
-	return &App{users: users, docs: docs, billing: bill, analysis: analyze, log: log}
+	return &App{users: users, docs: docs, analysis: analyze, allowlist: allowlist, log: log}
 }
 
 func (a *App) ensureUser(ctx context.Context, telegramID int64, locale string) (*domain.User, error) {
@@ -53,9 +54,8 @@ func (a *App) ensureUser(ctx context.Context, telegramID int64, locale string) (
 		return nil, err
 	}
 	u = &domain.User{
-		TelegramID:   telegramID,
-		Locale:       locale,
-		CheckBalance: 0,
+		TelegramID: telegramID,
+		Locale:     locale,
 	}
 	if err := a.users.Create(ctx, u); err != nil {
 		return nil, err
@@ -82,7 +82,7 @@ func (a *App) latestIngested(ctx context.Context, userID uuid.UUID) (*domain.Doc
 		return nil, err
 	}
 	for _, d := range docs {
-		if d.Status == domain.DocumentStatusIngested || d.Status == domain.DocumentStatusPaid {
+		if d.Status == domain.DocumentStatusIngested {
 			return &d, nil
 		}
 	}
@@ -95,7 +95,6 @@ func isURL(text string) bool {
 	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
 }
 
-// normalizeInputURL adds https:// when the user pastes a host/path without a scheme.
 func normalizeInputURL(text string) string {
 	text = strings.TrimSpace(text)
 	if isURL(text) {
@@ -150,8 +149,6 @@ func formatHighlightsPayload(payload []byte) string {
 func userFacingErr(locale string, err error) string {
 	msg := err.Error()
 	switch {
-	case errors.Is(err, core.ErrInsufficientBalance):
-		return i18n.T(locale, "insufficient_balance")
 	case errors.Is(err, core.ErrNoSources):
 		return i18n.T(locale, "err_ingest_failed")
 	case errors.Is(err, core.ErrForbidden), errors.Is(err, core.ErrInvalidState):
@@ -167,15 +164,6 @@ func userFacingErr(locale string, err error) string {
 	}
 }
 
-// withDisclaimer appends the non-legal-advice notice to bot messages.
 func withDisclaimer(locale, text string) string {
 	return text + "\n\n" + i18n.T(locale, "disclaimer")
-}
-
-func (a *App) startPurchase(ctx context.Context, userID uuid.UUID, packageID, locale string) (string, error) {
-	sess, err := a.billing.StartPurchase(ctx, userID, packageID, manual.ProviderID)
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf(i18n.T(locale, "buy_manual"), packageID, sess.PaymentID), nil
 }

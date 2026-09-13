@@ -1,156 +1,107 @@
+[Русский](README.ru.md)
+
 # EasyTerms
 
-Telegram-бот, который помогает **понять пользовательские соглашения** (Terms, Privacy, EULA и т.п.) до нажатия «Принять». Пользователь создаёт документ, отправляет текст или ссылку, получает простое объяснение и подсветку рисков.
+Self-hosted Telegram bot that helps you **understand terms of service** (Terms, Privacy, EULA, etc.) before you click Accept. Create a document, send text or a URL, get a plain-language summary and risk highlights.
 
-**Не является юридической консультацией** — только информационная помощь.
+**Not legal advice** — informational help only.
 
-## Стек
+## Stack
 
-- Go 1.23, PostgreSQL
+- Go 1.23+, **SQLite** (embedded, no separate DB server)
 - [go-telegram/bot](https://github.com/go-telegram/bot)
-- LLM через **OpenAI-compatible HTTP API** (OpenAI, LM Studio, OpenRouter и др.)
-- CI: `go test` + сборка Docker-образа на GitHub Actions
+- LLM via **OpenAI-compatible HTTP API** (OpenAI, OpenRouter, LM Studio, …)
+- CI: `go test` + Docker build on GitHub Actions
 
-Подробнее о продукте и архитектуре: [`.docs/`](.docs/).
+More context: [`.docs/`](.docs/).
 
-## Требования
-
-- **PostgreSQL** (локально, в облаке или в CI) — строка подключения в `DATABASE_URL`
-- **Telegram Bot Token** — от [@BotFather](https://t.me/BotFather)
-- **LLM API** — ключ OpenAI или локальный сервер (LM Studio)
-- **Go 1.23+** — для локального запуска (опционально; тесты можно гонять в CI)
-
-## Быстрый старт
+## Quick start
 
 ```bash
 git clone https://github.com/tikhomirovv/easyterms.git
 cd easyterms
 
 cp .env.example .env
-# отредактируйте .env (см. ниже)
+# edit .env — at minimum TELEGRAM_BOT_TOKEN, LLM_API_KEY, ALLOWED_TELEGRAM_IDS
 
-# миграции БД
-go run ./cmd/migrate -direction up
-
-# бот
 go run ./cmd/telegram
 ```
 
-Команды запускайте **из корня репозитория** — файл `.env` подхватывается автоматически.
+Run from the **repo root** so `.env` is found.
 
-## Конфигурация (`.env`)
+Migrations run automatically on bot startup. To apply manually:
 
-Скопируйте [`.env.example`](.env.example) в `.env` и заполните:
+```bash
+go run ./cmd/migrate -direction up
+```
 
-| Переменная | Назначение |
-|------------|------------|
-| `DATABASE_URL` | PostgreSQL, напр. `postgres://user:pass@localhost:5432/easyterms?sslmode=disable` |
-| `TELEGRAM_BOT_TOKEN` | Токен бота |
-| `LOG_LEVEL` | `debug` / `info` / `warn` / `error` (по умолчанию `info`) |
-| `LLM_PROVIDER` | `openai-compatible` (по умолчанию) |
-| `LLM_BASE_URL` | URL API, напр. `https://api.openai.com/v1` |
-| `LLM_API_KEY` | Ключ API (для OpenAI обязателен) |
-| `LLM_MODEL` | Имя модели |
-| `LLM_JSON_MODE` | `true` для OpenAI; часто `false` для LM Studio |
-| `LLM_PROVIDER_LABEL` | Метка в логах |
+## Configuration
 
-### OpenAI (облако)
+| Variable | Description |
+|----------|-------------|
+| `LOG_LEVEL` | `debug` / `info` / `warn` / `error` (default `info`) |
+| `DATABASE_PATH` | SQLite file path (default `data/easyterms.db`) |
+| `TELEGRAM_BOT_TOKEN` | Bot token from [@BotFather](https://t.me/BotFather) |
+| `ALLOWED_TELEGRAM_IDS` | Comma-separated Telegram user IDs; **empty = public bot** (warns at startup) |
+| `LLM_BASE_URL` | API base URL, e.g. `https://api.openai.com/v1` or OpenRouter / LM Studio |
+| `LLM_API_KEY` | API key (placeholder OK for local servers) |
+| `LLM_MODEL` | Model name for your provider |
+
+### Example LLM setups
+
+**OpenAI**
 
 ```env
 LLM_BASE_URL=https://api.openai.com/v1
 LLM_API_KEY=sk-...
-LLM_MODEL=gpt-4o-mini
-LLM_JSON_MODE=true
+LLM_MODEL=gpt-5.6-luna
 ```
 
-### LM Studio (локально)
+**OpenRouter**
 
-В LM Studio включите сервер (OpenAI-compatible), загрузите модель.
+```env
+LLM_BASE_URL=https://openrouter.ai/api/v1
+LLM_API_KEY=...
+LLM_MODEL=deepseek/deepseek-v4-flash-0731
+```
+
+**LM Studio (local)**
 
 ```env
 LLM_BASE_URL=http://127.0.0.1:1234/v1
 LLM_API_KEY=lm-studio
-LLM_MODEL=qwen/qwen3.6-27b
-LLM_JSON_MODE=false
-LLM_PROVIDER_LABEL=lm-studio
+LLM_MODEL=google/gemma-3-12b-it
 ```
 
-`LLM_MODEL` должен совпадать с именем модели в LM Studio. При загрузке модели задайте **достаточный context length** в LM Studio — весь текст документа уходит в LLM одним запросом.
+### Recommended models (examples only)
 
-`LOG_LEVEL=debug` — подробные логи ingest, analysis и HTTP-запросов к LLM.
+These are **starting points**, not guarantees — pricing and quality change; test on your provider:
 
-## Команды
+- **GPT-5.6 Luna** (`gpt-5.6-luna`) — OpenAI, summarization-oriented
+- **DeepSeek V4 Flash** — low-cost API via OpenRouter or DeepSeek
+- **Gemma 4** (e.g. 12B / E4B) — open weights, local or hosted
 
-### Миграции БД
+## Bot flow
 
-```bash
-go run ./cmd/migrate -direction up    # применить
-go run ./cmd/migrate -direction down  # откатить
-```
+`/start` → **New document** → paste text or URL → **Ready to analyze** → **Explain simply** / **Highlight risks**
 
-Нужен `DATABASE_URL` в окружении или в `.env`.
+`/demo` — static example text.
 
-### Telegram-бот
-
-```bash
-go run ./cmd/telegram
-```
-
-Обязательны: `TELEGRAM_BOT_TOKEN`, `DATABASE_URL`, настройки LLM.
-
-**В боте:** `/start` → «Новый документ» → текст или URL → «Готово к разбору» → «Объяснить просто» / «Подсветить риски».  
-`/demo` — пример без списания проверки.
-
-### Начисление проверок (admin, MVP)
-
-Ручное пополнение баланса (заглушка оплаты):
-
-```bash
-go run ./cmd/credit -telegram-id YOUR_TELEGRAM_ID -amount 3 -key admin-001
-```
-
-или `-user-id <uuid>` вместо `-telegram-id`.
-
-## Тесты
+## Tests
 
 ```bash
 go test ./...
 ```
 
-Интеграционные тесты PostgreSQL (опционально, локально):
-
-```bash
-export DATABASE_URL=postgres://...
-go run ./cmd/migrate -direction up
-go test -tags=integration ./internal/storage/postgres/...
-```
-
 ## Docker
-
-Сборка и запуск образа бота:
 
 ```bash
 docker build -t easyterms:latest .
-docker run --rm --env-file .env easyterms:latest
+docker run --rm --env-file .env -v easyterms-data:/app/data easyterms:latest
 ```
 
-Перед первым запуском примените миграции к вашей БД (`cmd/migrate` или отдельный job).
+Mount a volume for `data/` if you use the default `DATABASE_PATH`.
 
-## Структура репозитория
+## License
 
-```
-cmd/
-  telegram/   # бот (основной entrypoint)
-  migrate/    # миграции SQL
-  credit/     # admin: начисление проверок
-internal/
-  core/       # домен, сервисы, порты
-  telegram/   # handlers, i18n, клавиатуры
-  llm/        # OpenAI-compatible адаптер
-  storage/    # PostgreSQL, миграции
-.docs/        # PRD, технический дизайн
-```
-
-## Лицензия
-
-Уточняется.
+MIT — see [LICENSE](LICENSE).

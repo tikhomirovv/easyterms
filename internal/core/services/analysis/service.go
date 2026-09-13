@@ -85,7 +85,6 @@ func (s *Service) Run(ctx context.Context, userID, documentID uuid.UUID, analysi
 	slog.Debug("analysis: calling llm",
 		slog.String("document_id", documentID.String()),
 		slog.Int("input_chars", len(clean)),
-		slog.Bool("json_mode", true),
 	)
 	resp, err := s.llm.Analyze(ctx, ports.AnalyzeRequest{
 		CleanText:    clean,
@@ -131,10 +130,7 @@ func isSupportedType(t string) bool {
 }
 
 func requireIngested(doc *domain.Document) error {
-	if doc.Status != domain.DocumentStatusIngested && doc.Status != domain.DocumentStatusPaid {
-		return core.ErrInvalidState
-	}
-	if !doc.CheckConsumed {
+	if doc.Status != domain.DocumentStatusIngested {
 		return core.ErrInvalidState
 	}
 	if doc.CleanText == nil || *doc.CleanText == "" {

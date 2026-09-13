@@ -9,10 +9,6 @@ func mainMenuKeyboard(locale string) *models.InlineKeyboardMarkup {
 	return &models.InlineKeyboardMarkup{
 		InlineKeyboard: [][]models.InlineKeyboardButton{
 			{{Text: i18n.T(locale, "btn_new_doc"), CallbackData: cbNewDoc}},
-			{
-				{Text: i18n.T(locale, "btn_balance"), CallbackData: cbBalance},
-				{Text: i18n.T(locale, "btn_buy"), CallbackData: cbBuy},
-			},
 			{{Text: i18n.T(locale, "btn_demo"), CallbackData: cbDemo}},
 		},
 	}
@@ -35,16 +31,6 @@ func ingestedKeyboard(locale string) *models.InlineKeyboardMarkup {
 				{Text: i18n.T(locale, "btn_highlights"), CallbackData: cbAnalyzeHigh},
 			},
 			{{Text: i18n.T(locale, "btn_new_doc"), CallbackData: cbNewDoc}},
-		},
-	}
-}
-
-func buyKeyboard(locale string) *models.InlineKeyboardMarkup {
-	return &models.InlineKeyboardMarkup{
-		InlineKeyboard: [][]models.InlineKeyboardButton{
-			{{Text: i18n.T(locale, "btn_pkg_1"), CallbackData: cbBuyPkg1}},
-			{{Text: i18n.T(locale, "btn_pkg_3"), CallbackData: cbBuyPkg3}},
-			{{Text: i18n.T(locale, "btn_pkg_10"), CallbackData: cbBuyPkg10}},
 		},
 	}
 }

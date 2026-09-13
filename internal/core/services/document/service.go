@@ -14,12 +14,6 @@ import (
 	"github.com/tikhomirovv/easyterms/internal/ingest/urlfetch"
 )
 
-// Billing gates and records check consumption.
-type Billing interface {
-	HasChecks(ctx context.Context, userID uuid.UUID) (bool, error)
-	ConsumeCheck(ctx context.Context, userID, documentID uuid.UUID) error
-}
-
 // URLFetcher downloads a page and returns plain text for ingest.
 type URLFetcher interface {
 	FetchText(ctx context.Context, rawURL string) (string, error)
@@ -36,7 +30,6 @@ type Service struct {
 	users   ports.UserRepository
 	docs    ports.DocumentRepository
 	sources ports.DocumentSourceRepository
-	billing Billing
 	urls    URLFetcher
 	llm     ports.LLMClient
 }
@@ -46,10 +39,9 @@ func NewService(
 	users ports.UserRepository,
 	docs ports.DocumentRepository,
 	sources ports.DocumentSourceRepository,
-	billing Billing,
 	llm ports.LLMClient,
 ) *Service {
-	return NewServiceWithURLFetcher(users, docs, sources, billing, defaultURLFetcher{}, llm)
+	return NewServiceWithURLFetcher(users, docs, sources, defaultURLFetcher{}, llm)
 }
 
 // NewServiceWithURLFetcher allows injecting a URL fetcher (tests).
@@ -57,7 +49,6 @@ func NewServiceWithURLFetcher(
 	users ports.UserRepository,
 	docs ports.DocumentRepository,
 	sources ports.DocumentSourceRepository,
-	billing Billing,
 	urls URLFetcher,
 	llm ports.LLMClient,
 ) *Service {
@@ -65,7 +56,6 @@ func NewServiceWithURLFetcher(
 		users:   users,
 		docs:    docs,
 		sources: sources,
-		billing: billing,
 		urls:    urls,
 		llm:     llm,
 	}
@@ -77,9 +67,8 @@ func (s *Service) CreateDocument(ctx context.Context, userID uuid.UUID) (*domain
 		return nil, err
 	}
 	doc := &domain.Document{
-		UserID:        userID,
-		Status:        domain.DocumentStatusDraft,
-		CheckConsumed: false,
+		UserID: userID,
+		Status: domain.DocumentStatusDraft,
 	}
 	if err := s.docs.Create(ctx, doc); err != nil {
 		return nil, err
@@ -109,7 +98,7 @@ func (s *Service) AddTextSource(ctx context.Context, userID, documentID uuid.UUI
 	})
 }
 
-// AddURLSource appends a URL source to a draft document (fetch happens in ingest pipeline later).
+// AddURLSource appends a URL source to a draft document (fetch happens in ingest).
 func (s *Service) AddURLSource(ctx context.Context, userID, documentID uuid.UUID, rawURL string) error {
 	rawURL = strings.TrimSpace(rawURL)
 	if rawURL == "" {
@@ -131,7 +120,7 @@ func (s *Service) AddURLSource(ctx context.Context, userID, documentID uuid.UUID
 	})
 }
 
-// Ingest runs LLM extraction, persists clean text, and consumes one check on first success.
+// Ingest runs LLM extraction and persists clean text.
 func (s *Service) Ingest(ctx context.Context, userID, documentID uuid.UUID) (*domain.Document, error) {
 	slog.Debug("ingest: start",
 		slog.String("document_id", documentID.String()),
@@ -145,8 +134,7 @@ func (s *Service) Ingest(ctx context.Context, userID, documentID uuid.UUID) (*do
 		return nil, core.ErrForbidden
 	}
 
-	// Already ingested with consumed check — return cached document without calling LLM.
-	if doc.CheckConsumed && doc.CleanText != nil && *doc.CleanText != "" {
+	if doc.Status == domain.DocumentStatusIngested && doc.CleanText != nil && *doc.CleanText != "" {
 		slog.Debug("ingest: skip llm, already ingested", slog.String("document_id", documentID.String()))
 		return doc, nil
 	}
@@ -162,16 +150,6 @@ func (s *Service) Ingest(ctx context.Context, userID, documentID uuid.UUID) (*do
 	user, err := s.users.GetByID(ctx, userID)
 	if err != nil {
 		return nil, err
-	}
-	if !doc.CheckConsumed {
-		ok, err := s.billing.HasChecks(ctx, userID)
-		if err != nil {
-			return nil, err
-		}
-		slog.Debug("ingest: balance check", slog.Bool("has_checks", ok), slog.String("document_id", documentID.String()))
-		if !ok {
-			return nil, core.ErrInsufficientBalance
-		}
 	}
 
 	extractReq, err := s.buildExtractRequest(ctx, srcs, user.Locale, doc.ID.String())
@@ -212,14 +190,6 @@ func (s *Service) Ingest(ctx context.Context, userID, documentID uuid.UUID) (*do
 		slog.String("document_id", doc.ID.String()),
 		slog.Int("clean_chars", len(clean)),
 	)
-
-	if !doc.CheckConsumed {
-		if err := s.billing.ConsumeCheck(ctx, userID, doc.ID); err != nil {
-			return nil, err
-		}
-		doc.CheckConsumed = true
-		slog.Debug("ingest: check consumed", slog.String("document_id", doc.ID.String()))
-	}
 
 	if err := s.docs.Update(ctx, doc); err != nil {
 		return nil, err

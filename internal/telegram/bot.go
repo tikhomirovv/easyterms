@@ -13,7 +13,7 @@ import (
 
 // Run starts the Telegram bot until ctx is cancelled.
 func Run(ctx context.Context, token string, app *App) error {
-	tb, err := bot.New(token, bot.WithDefaultHandler(app.handleDefault))
+	tb, err := bot.New(token, bot.WithDefaultHandler(app.wrap(app.handleDefault)))
 	if err != nil {
 		return fmt.Errorf("telegram bot: %w", err)
 	}
@@ -25,12 +25,7 @@ func Run(ctx context.Context, token string, app *App) error {
 	tb.RegisterHandler(bot.HandlerTypeCallbackQueryData, cbReadyIngest, bot.MatchTypeExact, app.wrap(app.handleReady))
 	tb.RegisterHandler(bot.HandlerTypeCallbackQueryData, cbAnalyzePlain, bot.MatchTypeExact, app.wrap(app.handleAnalyzePlain))
 	tb.RegisterHandler(bot.HandlerTypeCallbackQueryData, cbAnalyzeHigh, bot.MatchTypeExact, app.wrap(app.handleAnalyzeHighlights))
-	tb.RegisterHandler(bot.HandlerTypeCallbackQueryData, cbBalance, bot.MatchTypeExact, app.wrap(app.handleBalance))
-	tb.RegisterHandler(bot.HandlerTypeCallbackQueryData, cbBuy, bot.MatchTypeExact, app.wrap(app.handleBuy))
 	tb.RegisterHandler(bot.HandlerTypeCallbackQueryData, cbDemo, bot.MatchTypeExact, app.wrap(app.handleDemo))
-	tb.RegisterHandler(bot.HandlerTypeCallbackQueryData, cbBuyPkg1, bot.MatchTypeExact, app.wrap(app.handleBuyPkg1))
-	tb.RegisterHandler(bot.HandlerTypeCallbackQueryData, cbBuyPkg3, bot.MatchTypeExact, app.wrap(app.handleBuyPkg3))
-	tb.RegisterHandler(bot.HandlerTypeCallbackQueryData, cbBuyPkg10, bot.MatchTypeExact, app.wrap(app.handleBuyPkg10))
 
 	app.log.Info("telegram bot listening")
 	tb.Start(ctx)
@@ -39,17 +34,23 @@ func Run(ctx context.Context, token string, app *App) error {
 
 func (a *App) wrap(fn func(context.Context, *bot.Bot, *models.Update) error) bot.HandlerFunc {
 	return func(ctx context.Context, b *bot.Bot, update *models.Update) {
+		tgID := a.telegramID(update)
+		if tgID != 0 && !a.allowlist.Allowed(tgID) {
+			locale := a.locale(update)
+			_ = a.reply(ctx, b, update, i18n.T(locale, "access_denied"), nil)
+			return
+		}
 		if err := fn(ctx, b, update); err != nil {
 			a.log.Error("handler", slog.String("error", err.Error()))
 		}
 	}
 }
 
-func (a *App) handleDefault(ctx context.Context, b *bot.Bot, update *models.Update) {
+func (a *App) handleDefault(ctx context.Context, b *bot.Bot, update *models.Update) error {
 	if update.Message == nil || update.Message.Text == "" {
-		return
+		return nil
 	}
-	_ = a.handleText(ctx, b, update)
+	return a.handleText(ctx, b, update)
 }
 
 func (a *App) handleStart(ctx context.Context, b *bot.Bot, update *models.Update) error {
@@ -163,47 +164,6 @@ func (a *App) runAnalysis(
 	body = truncateRunes(body, 3500)
 	text := fmt.Sprintf(i18n.T(locale, msgKey), body)
 	return a.reply(ctx, b, update, withDisclaimer(locale, text), ingestedKeyboard(locale))
-}
-
-func (a *App) handleBalance(ctx context.Context, b *bot.Bot, update *models.Update) error {
-	locale := a.locale(update)
-	user, err := a.ensureUser(ctx, a.telegramID(update), locale)
-	if err != nil {
-		return err
-	}
-	bal, err := a.billing.Balance(ctx, user.ID)
-	if err != nil {
-		return err
-	}
-	return a.reply(ctx, b, update, fmt.Sprintf(i18n.T(locale, "balance"), bal), mainMenuKeyboard(locale))
-}
-
-func (a *App) handleBuy(ctx context.Context, b *bot.Bot, update *models.Update) error {
-	locale := a.locale(update)
-	return a.reply(ctx, b, update, i18n.T(locale, "buy_intro"), buyKeyboard(locale))
-}
-
-func (a *App) handleBuyPkg1(ctx context.Context, b *bot.Bot, update *models.Update) error {
-	return a.handleBuyPackage(ctx, b, update, "checks_1")
-}
-func (a *App) handleBuyPkg3(ctx context.Context, b *bot.Bot, update *models.Update) error {
-	return a.handleBuyPackage(ctx, b, update, "checks_3")
-}
-func (a *App) handleBuyPkg10(ctx context.Context, b *bot.Bot, update *models.Update) error {
-	return a.handleBuyPackage(ctx, b, update, "checks_10")
-}
-
-func (a *App) handleBuyPackage(ctx context.Context, b *bot.Bot, update *models.Update, packageID string) error {
-	locale := a.locale(update)
-	user, err := a.ensureUser(ctx, a.telegramID(update), locale)
-	if err != nil {
-		return err
-	}
-	msg, err := a.startPurchase(ctx, user.ID, packageID, locale)
-	if err != nil {
-		return a.reply(ctx, b, update, userFacingErr(locale, err), mainMenuKeyboard(locale))
-	}
-	return a.reply(ctx, b, update, msg, mainMenuKeyboard(locale))
 }
 
 func (a *App) reply(ctx context.Context, b *bot.Bot, update *models.Update, text string, kb *models.InlineKeyboardMarkup) error {
