@@ -5,7 +5,7 @@
 - **Repo:** GitHub `tikhomirovv/easyterms`, branch `main`.
 - **Tags:** plain semver `0.1.0` (no `v` prefix). CI listens on `push.tags: [0-9]+.[0-9]+.[0-9]+`.
 - **Version in code:** `internal/version/version.go` → `const Version` — bump on every release.
-- **Docker:** tag push → `.github/workflows/release.yml` → `ghcr.io/tikhomirovv/easyterms` (`latest` + semver tags).
+- **Docker:** tag push → `.github/workflows/release.yml` → multi-arch `ghcr.io/tikhomirovv/easyterms` (`linux/amd64` + `linux/arm64`; `latest` + semver tags).
 - **CLI:** `gh` (GitHub CLI).
 - **No local archive:** release notes exist only on the GitHub Release page.
 - **No pre-releases, no drafts.**

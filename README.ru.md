@@ -97,7 +97,7 @@ go test ./...
 
 ### Готовый образ (рекомендуется)
 
-На каждый тег версии (`0.1.0`, `1.2.3`, … — без префикса `v`) CI публикует публичный образ в [GitHub Container Registry](https://github.com/tikhomirovv/easyterms/pkgs/container/easyterms).
+На каждый тег версии (`0.1.0`, `1.2.3`, … — без префикса `v`) CI публикует публичный **multi-arch** образ (`amd64` + `arm64`) в [GitHub Container Registry](https://github.com/tikhomirovv/easyterms/pkgs/container/easyterms). Docker сам выбирает архитектуру (ПК, VPS, Orange Pi, Raspberry Pi).
 
 ```bash
 cp .env.example .env

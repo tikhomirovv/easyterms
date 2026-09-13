@@ -97,7 +97,7 @@ go test ./...
 
 ### Pre-built image (recommended)
 
-On every version tag (`0.1.0`, `1.2.3`, … — no `v` prefix), CI publishes a public image to [GitHub Container Registry](https://github.com/tikhomirovv/easyterms/pkgs/container/easyterms).
+On every version tag (`0.1.0`, `1.2.3`, … — no `v` prefix), CI publishes a public **multi-arch** image (`linux/amd64` + `linux/arm64`) to [GitHub Container Registry](https://github.com/tikhomirovv/easyterms/pkgs/container/easyterms). Docker pulls the matching architecture automatically (PC, VPS, Orange Pi, Raspberry Pi).
 
 ```bash
 cp .env.example .env
