@@ -128,7 +128,7 @@ Env:
 
 Multi-stage: build `cmd/telegram` → minimal alpine runtime.
 
-**Release:** `.github/workflows/release.yml` — on git tag `X.Y.Z` (no `v` prefix), push to `ghcr.io/tikhomirovv/easyterms` (`latest` + semver tags). App version: `internal/version/version.go`.
+**Release:** `.github/workflows/release.yml` — on git tag `X.Y.Z` (no `v` prefix): `go test` on tagged commit, then push to `ghcr.io/tikhomirovv/easyterms` (`latest` + semver tags). App version: `internal/version/version.go` (logged at bot startup).
 
 **Local / compose:** root `docker-compose.yml` — `env_file: .env`, volume `easyterms-data:/app/data`.
 

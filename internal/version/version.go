@@ -2,4 +2,5 @@
 package version
 
 // Version is the current release. Bumped by the release skill before tagging.
+// Logged at bot startup (see cmd/telegram); not shown in Telegram UI unless we add a /version command later.
 const Version = "0.0.0"

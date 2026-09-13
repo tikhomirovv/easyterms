@@ -1,4 +1,4 @@
-# Build and publish a public Docker image to GHCR when a version tag is pushed.
+# Release pipeline: tests on the tagged commit, then publish Docker image to GHCR.
 # Example: git tag 0.1.0 && git push origin 0.1.0
 name: Release
 
@@ -12,8 +12,25 @@ permissions:
   packages: write
 
 jobs:
+  test:
+    name: go test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run tests
+        run: go test ./...
+
   docker:
     name: publish image
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

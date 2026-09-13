@@ -17,6 +17,7 @@ import (
 	"github.com/tikhomirovv/easyterms/internal/storage/migrate"
 	"github.com/tikhomirovv/easyterms/internal/storage/sqlite"
 	"github.com/tikhomirovv/easyterms/internal/telegram"
+	"github.com/tikhomirovv/easyterms/internal/version"
 )
 
 func main() {
@@ -76,6 +77,7 @@ func run(ctx context.Context) error {
 
 	app := telegram.NewApp(store.Users(), docs, analyze, telegram.NewAllowlist(cfg.AllowedTelegramIDs), log)
 	log.Info("easyterms telegram starting",
+		slog.String("version", version.Version),
 		slog.String("log_level", cfg.LogLevel),
 		slog.String("database_path", cfg.DatabasePath),
 	)

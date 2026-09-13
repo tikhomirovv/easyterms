@@ -25,15 +25,18 @@ git pull --ff-only
 1. If no version from the user → ask: «Какая версия релиза?» (e.g. `0.1.0`). Do not guess.
 2. Normalize: strip leading `v` if present. Tag name = version string.
 
-## 3. CI on main (gate)
+## 3. How CI fits in
 
-```text
-gh run list --branch main --limit 1
-```
+Two pipelines, different triggers:
 
-Latest workflow run on `main` must be **completed / success** (the `CI` workflow: `go test` + `docker build`). If still running, wait or ask the user. If failed, **stop** — fix on `main` before releasing.
+| Workflow | When | What |
+|----------|------|------|
+| `CI` | every push/PR to `main` | `go test` + `docker build` (sanity on merge) |
+| `Release` | push semver **tag** | `go test` on **that exact commit** → only then publish GHCR image |
 
-This ensures the commit you tag was already verified by GitHub Actions, not only local `go test`.
+You do **not** need to manually check `main` CI before tagging. The **tag pipeline is the release gate**: tests on the tagged snapshot, then Docker push.
+
+Still run `go test ./...` locally before tagging — faster feedback than waiting for CI.
 
 ## 4. Bump version in code
 
@@ -51,7 +54,7 @@ git commit -m "chore(release): <version>"
 git push origin main
 ```
 
-Re-check CI if push triggered a new run — wait for green before tagging.
+Then tag the **current `main` HEAD** (the commit that includes the version bump).
 
 ## 5. Commits since last tag
 
