@@ -128,7 +128,7 @@ Env:
 
 Multi-stage: build `cmd/telegram` → minimal alpine runtime.
 
-**Release:** `.github/workflows/release.yml` — on git tag `v*`, push to `ghcr.io/tikhomirovv/easyterms` (`latest` + semver tags).
+**Release:** `.github/workflows/release.yml` — on git tag `X.Y.Z` (no `v` prefix), push to `ghcr.io/tikhomirovv/easyterms` (`latest` + semver tags). App version: `internal/version/version.go`.
 
 **Local / compose:** root `docker-compose.yml` — `env_file: .env`, volume `easyterms-data:/app/data`.
 
@@ -150,7 +150,7 @@ CI (`.github/workflows/ci.yml`): `go test ./...` + `docker build`. No Postgres s
 
 ## Agent skills
 
-Portable agent workflows live in `.agents/skills/` (not `.cursor/`). Release procedure: skill `release` — tag `v*`, GitHub Release notes (English), GHCR image via CI.
+Portable agent workflows live in `.agents/skills/` (not `.cursor/`). Release procedure: skill `release` — tag `X.Y.Z`, bump `internal/version`, GitHub Release notes (English), GHCR image via CI.
 
 ## Инженерные правила
 

@@ -97,7 +97,7 @@ go test ./...
 
 ### Pre-built image (recommended)
 
-On every version tag (`v*`), CI publishes a public image to [GitHub Container Registry](https://github.com/tikhomirovv/easyterms/pkgs/container/easyterms).
+On every version tag (`0.1.0`, `1.2.3`, … — no `v` prefix), CI publishes a public image to [GitHub Container Registry](https://github.com/tikhomirovv/easyterms/pkgs/container/easyterms).
 
 ```bash
 cp .env.example .env
@@ -113,7 +113,7 @@ See [`docker-compose.yml`](docker-compose.yml) — minimal example with comments
 image: ghcr.io/tikhomirovv/easyterms:0.1.0
 ```
 
-The first image appears after you push a tag to `main` (e.g. `git tag v0.1.0 && git push origin v0.1.0`).
+The first image appears after you push a tag to `main` (e.g. `git tag 0.1.0 && git push origin 0.1.0`).
 
 ### Build locally
 

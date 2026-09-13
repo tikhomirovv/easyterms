@@ -6,7 +6,7 @@
 #   3. docker compose up -d
 #   4. docker compose logs -f
 #
-# Pre-built image is published to GHCR on every git tag (v*).
+# Pre-built image is published to GHCR on every semver git tag (e.g. 0.1.0).
 # To build from source instead, comment out "image" and uncomment "build".
 
 services:

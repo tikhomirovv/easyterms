@@ -1,11 +1,11 @@
 # Build and publish a public Docker image to GHCR when a version tag is pushed.
-# Example: git tag v0.1.0 && git push origin v0.1.0
+# Example: git tag 0.1.0 && git push origin 0.1.0
 name: Release
 
 on:
   push:
     tags:
-      - "v*"
+      - "[0-9]+.[0-9]+.[0-9]+"
 
 permissions:
   contents: read

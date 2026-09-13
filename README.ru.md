@@ -97,7 +97,7 @@ go test ./...
 
 ### Готовый образ (рекомендуется)
 
-На каждый тег версии (`v*`) CI публикует публичный образ в [GitHub Container Registry](https://github.com/tikhomirovv/easyterms/pkgs/container/easyterms).
+На каждый тег версии (`0.1.0`, `1.2.3`, … — без префикса `v`) CI публикует публичный образ в [GitHub Container Registry](https://github.com/tikhomirovv/easyterms/pkgs/container/easyterms).
 
 ```bash
 cp .env.example .env
@@ -113,7 +113,7 @@ docker compose logs -f
 image: ghcr.io/tikhomirovv/easyterms:0.1.0
 ```
 
-Первый образ появится после push тега в `main` (например `git tag v0.1.0 && git push origin v0.1.0`).
+Первый образ появится после push тега в `main` (например `git tag 0.1.0 && git push origin 0.1.0`).
 
 ### Сборка локально
 

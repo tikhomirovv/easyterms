@@ -2,16 +2,16 @@
 name: release
 description: >
   Prepare and publish an EasyTerms release on main — ask the target version,
-  collect commits since the previous tag, write English GitHub Release notes
-  (technical + optional user-facing), create annotated tag vX.Y.Z, and publish
-  via gh release create. Tag push triggers GHCR Docker image build. Use when
-  the user asks to release, cut a version, publish a tag, release notes, or
-  ship a new Docker image version.
+  bump internal/version, collect commits since the previous tag, write English
+  GitHub Release notes (technical + optional user-facing), create annotated tag
+  X.Y.Z (no v prefix), and publish via gh release create. Tag push triggers GHCR
+  Docker image build. Use when the user asks to release, cut a version, publish
+  a tag, release notes, or ship a new Docker image version.
 ---
 
 # Release
 
-EasyTerms **self-hosted Telegram bot** (GitHub `tikhomirovv/easyterms`). Default branch: `main`. Tags use **`v` prefix** (`v0.1.0`). Not GitLab.
+EasyTerms **self-hosted Telegram bot** (GitHub `tikhomirovv/easyterms`). Default branch: `main`. Tags are **plain semver** (`0.1.0`) — **no `v` prefix**.
 
 Read references in order:
 
@@ -34,13 +34,12 @@ Write notes to a **temp file outside the repo** (or pass inline to `gh`). Never 
 ## Hard rules
 
 - Ask target **version** if not given; do not guess semver.
-- Tag format: `v<version>` (e.g. user says `0.1.0` → tag `v0.1.0`). Match existing tags.
-- Collect **all commits since the previous release tag** on `main`.
+- Tag format: `<version>` exactly (e.g. `0.1.0`). Strip a leading `v` if the user types `v0.1.0`.
+- Update `internal/version/version.go` (`const Version = "…"`) to match the tag, commit on `main`, push, then tag.
+- Collect **all commits since the previous release tag** on `main` (first release = entire `main` history).
 - Run `go test ./...` before tagging; stop if tests fail.
+- Confirm latest CI on `main` is **success** (`gh run list --branch main --limit 1`) before tagging.
 - If branch ≠ `main`: stop (see workflow).
-- Once the version is known: analyze commits, write notes, tag, `gh release create` — **no pause** for notes/tag approval. Only stop if branch ≠ `main`, tests fail, or `gh` is missing.
-- Pushing the tag starts `.github/workflows/release.yml` → public image on `ghcr.io/tikhomirovv/easyterms`.
-
-## No version file
-
-This Go repo has **no** `package.json` / app version constant to bump. The tag **is** the version. Do not invent a version bump commit unless the user explicitly asks to embed version in code later.
+- **No pre-releases**, **no draft releases** — publish immediately via `gh release create`.
+- Once the version is known: bump version, analyze commits, write notes, tag, `gh release create` — **no pause** for approval. Only stop if branch ≠ `main`, tests fail, CI failed, or `gh` is missing.
+- Pushing the tag starts `.github/workflows/release.yml` → image on `ghcr.io/tikhomirovv/easyterms`.

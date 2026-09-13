@@ -3,16 +3,17 @@
 ## Context
 
 - **Repo:** GitHub `tikhomirovv/easyterms`, branch `main`.
-- **Tags:** `v*` prefix (`v0.1.0`). CI release workflow listens on `push.tags: v*`.
+- **Tags:** plain semver `0.1.0` (no `v` prefix). CI listens on `push.tags: [0-9]+.[0-9]+.[0-9]+`.
+- **Version in code:** `internal/version/version.go` → `const Version` — bump on every release.
 - **Docker:** tag push → `.github/workflows/release.yml` → `ghcr.io/tikhomirovv/easyterms` (`latest` + semver tags).
-- **CLI:** `gh` (GitHub CLI), not `glab`.
+- **CLI:** `gh` (GitHub CLI).
 - **No local archive:** release notes exist only on the GitHub Release page.
+- **No pre-releases, no drafts.**
 
 ## 1. Branch check
 
 - If current branch is `main`: continue silently.
 - Otherwise: **stop**, show current branch. Wait until the user switches to `main` and `git pull --ff-only`, or explicitly overrides.
-- Do not warn when already on `main`.
 
 ## 2. Sync
 
@@ -21,16 +22,46 @@ git checkout main
 git pull --ff-only
 ```
 
-1. If no version from the user → ask: «Какая версия релиза?» (accept `0.1.0` or `v0.1.0`; normalize to tag `v0.1.0`).
-2. Do not guess semver.
+1. If no version from the user → ask: «Какая версия релиза?» (e.g. `0.1.0`). Do not guess.
+2. Normalize: strip leading `v` if present. Tag name = version string.
 
-## 3. Commits since last tag
+## 3. CI on main (gate)
 
 ```text
-git tag -l "v*" --sort=-version:refname
+gh run list --branch main --limit 1
 ```
 
-**Previous tag** = latest semver tag **before** the target (ignore pre-release tags like `v0.1.0-rc.1` unless the user says otherwise).
+Latest workflow run on `main` must be **completed / success** (the `CI` workflow: `go test` + `docker build`). If still running, wait or ask the user. If failed, **stop** — fix on `main` before releasing.
+
+This ensures the commit you tag was already verified by GitHub Actions, not only local `go test`.
+
+## 4. Bump version in code
+
+Edit `internal/version/version.go`:
+
+```go
+const Version = "<version>"
+```
+
+Stage and commit on `main`:
+
+```text
+git add internal/version/version.go
+git commit -m "chore(release): <version>"
+git push origin main
+```
+
+Re-check CI if push triggered a new run — wait for green before tagging.
+
+## 5. Commits since last tag
+
+```text
+git tag -l --sort=-version:refname
+```
+
+Keep tags that match `X.Y.Z` semver (no `v`). Ignore non-semver tag names.
+
+**Previous tag** = latest semver tag **before** the target.
 
 **First release** (no tags yet): use full history on `main`:
 
@@ -44,41 +75,23 @@ Otherwise:
 git log <previousTag>..HEAD --pretty=format:"%H|%s|%b|%ad" --date=iso
 ```
 
-Optional per commit:
+Optional: `gh issue view` when commits mention `#N`.
 
-```text
-git diff-tree --no-commit-id --name-only -r <hash>
-```
-
-Optional: `gh issue view` when commits mention `#N` or PR numbers.
-
-This set is the sole source for both note sections.
-
-## 4. Verify
+## 6. Verify
 
 ```text
 go test ./...
 ```
 
-Stop on failure. Do not tag a broken `main`.
+Stop on failure.
 
-Confirm latest `main` CI is green when practical (`gh run list --branch main --limit 1`).
+## 7. Analyze and classify
 
-## 5. Analyze and classify
+See [user-draft.md](user-draft.md) for the optional user section.
 
-### Technical (always)
+## 8. Write release notes (ephemeral)
 
-Stack changes: Go core, SQLite, Telegram bot, LLM adapter, CI, Docker, migrations, agent skills, docs. English, precise, grouped by area.
-
-### User-facing (only when honest)
-
-Read [user-draft.md](user-draft.md). Include only if a **self-hoster or bot user** would notice.
-
-Internal-only → omit user section. Do not ask «internal or not?» when commits make it obvious.
-
-## 6. Write release notes (ephemeral)
-
-Use a temp path **outside the repo**, e.g. `%TEMP%\easyterms-release-v0.1.0.md` (Windows) or `/tmp/easyterms-release-v0.1.0.md`.
+Temp file **outside the repo**. English only.
 
 ```markdown
 ## Technical changes
@@ -90,56 +103,54 @@ Use a temp path **outside the repo**, e.g. `%TEMP%\easyterms-release-v0.1.0.md` 
 - …
 ```
 
-Omit the user heading when step 5 has no user bullets.
-
-Add a compare link when a previous tag exists:
+Compare link when a previous tag exists:
 
 ```markdown
-**Full changelog:** https://github.com/tikhomirovv/easyterms/compare/<previousTag>...v<version>
+**Full changelog:** https://github.com/tikhomirovv/easyterms/compare/<previousTag>...<version>
 ```
 
-Do **not** wait for the user to approve the text. Proceed to publish.
+## 9. Tag and GitHub Release
 
-## 7. Tag and GitHub Release
-
-Prefer one step — `gh release create` creates the tag if missing:
+Publish immediately (not draft):
 
 ```text
-gh release create v<version> --target main --title "v<version>" --notes-file <temp-notes-path>
+gh release create <version> --target main --title "<version>" --notes-file <temp-notes-path>
 ```
 
-Or annotated tag first, then release:
-
-```text
-git tag -a v<version> -m "Release v<version>"
-git push origin v<version>
-gh release create v<version> --title "v<version>" --notes-file <temp-notes-path>
-```
+This creates the annotated tag and the GitHub Release in one step.
 
 Delete the temp notes file after success.
 
 Verify:
 
 ```text
-gh release view v<version>
+gh release view <version>
 gh run list --workflow release.yml --limit 3
 ```
 
-If the Release workflow did not start, check Actions tab and tag name (`v*`).
+## 10. GHCR (Docker registry)
 
-## 8. After publish
+GitHub Container Registry hosts the bot image at `ghcr.io/tikhomirovv/easyterms`.
 
-Remind the user:
+- Tag push triggers the **Release** workflow automatically.
+- For **public repos**, the package is usually public after the first successful push.
+- If `docker pull` returns 403/404, open **GitHub → Packages → easyterms → Package settings → Change visibility → Public** (one-time).
 
-- Docker image: `ghcr.io/tikhomirovv/easyterms:<version>` and `:latest`
-- Self-host: `docker compose pull && docker compose up -d` (see root `docker-compose.yml`)
-- First GHCR publish may require setting package visibility to **public** in GitHub UI
+Tell the user the image tags: `<version>` and `latest`.
+
+## 11. After publish
+
+Self-host update:
+
+```text
+docker compose pull
+docker compose up -d
+```
 
 ## Do not
 
-- Commit release notes into the repo (no `.release-notes/`, no `CHANGELOG.md` unless the user asks).
+- Use `v` prefix on tags.
+- Create pre-release or draft GitHub releases.
+- Commit release notes into the repo.
+- Tag when CI on `main` failed or `go test` failed.
 - Guess the version.
-- Tag when not on `main` (unless user overrides).
-- Tag when `go test ./...` fails.
-- Invent user-visible changes; put SQLite/CI internals in the user section.
-- Pause for notes/tag/release approval after the version is known.
