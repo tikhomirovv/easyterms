@@ -27,16 +27,26 @@ git pull --ff-only
 
 ## 3. How CI fits in
 
-Two pipelines, different triggers:
+Two pipelines, different jobs:
 
 | Workflow | When | What |
 |----------|------|------|
-| `CI` | every push/PR to `main` | `go test` + `docker build` (sanity on merge) |
-| `Release` | push semver **tag** | `go test` on **that exact commit** → only then publish GHCR image |
+| `CI` | every push/PR to `main` | `go test` only |
+| `Release` | push semver **tag** | Docker **build + push** to GHCR (no tests) |
 
-You do **not** need to manually check `main` CI before tagging. The **tag pipeline is the release gate**: tests on the tagged snapshot, then Docker push.
+**Before tagging**, verify the commit twice (no third test run on tag):
 
-Still run `go test ./...` locally before tagging — faster feedback than waiting for CI.
+1. **Local:** `go test ./...`
+2. **CI on that commit:** after pushing the version-bump commit to `main`, wait until CI is green on it:
+
+```text
+git rev-parse HEAD
+gh run list --commit <sha> --workflow CI --limit 3
+```
+
+Tag only when the latest `CI` run for that commit is **success**. If still running, wait. If failed, fix before tagging.
+
+The tag pipeline does **not** re-run tests — it only builds and publishes the image. A broken `Dockerfile` is caught here (rare if Dockerfile rarely changes).
 
 ## 4. Bump version in code
 

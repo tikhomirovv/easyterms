@@ -26,7 +26,7 @@ EasyTerms — **self-hosted** Telegram-бот, который помогает �
 - **Open-source personal bot** (MIT), без монетизации и платёжной логики
 - Стек: Go, **SQLite**, Telegram через go-telegram/bot, LLM через OpenAI-compatible API
 - Ограничение доступа: `ALLOWED_TELEGRAM_IDS` (пусто = публичный бот с warning в логах)
-- CI: `go test ./...` + Docker build на GitHub Actions
+- CI: `go test ./...` на GitHub Actions; Docker build — только на тегах релиза
 - Документация: `README.md` (EN), `README.ru.md` (RU), `.docs/`
 
 ## Лицензия

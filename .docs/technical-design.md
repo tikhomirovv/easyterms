@@ -128,7 +128,7 @@ Env:
 
 Multi-stage: build `cmd/telegram` → minimal alpine runtime.
 
-**Release:** `.github/workflows/release.yml` — on git tag `X.Y.Z` (no `v` prefix): `go test` on tagged commit, then push to `ghcr.io/tikhomirovv/easyterms` (`latest` + semver tags). App version: `internal/version/version.go` (logged at bot startup).
+**Release:** `.github/workflows/release.yml` — on git tag `X.Y.Z` (no `v` prefix): build and push to `ghcr.io/tikhomirovv/easyterms` (`latest` + semver tags). Tag only after local `go test` + green `CI` on that commit. App version: `internal/version/version.go` (logged at bot startup).
 
 **Local / compose:** root `docker-compose.yml` — `env_file: .env`, volume `easyterms-data:/app/data`.
 
@@ -146,7 +146,7 @@ docker compose up -d
 | `internal/storage/migrate` | integration |
 | `internal/telegram` | unit (allowlist, helpers) |
 
-CI (`.github/workflows/ci.yml`): `go test ./...` + `docker build`. No Postgres service.
+CI (`.github/workflows/ci.yml`): `go test ./...` on push/PR to `main`. Docker build only in `release.yml` on semver tags.
 
 ## Agent skills
 

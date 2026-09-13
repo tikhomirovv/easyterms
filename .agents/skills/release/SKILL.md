@@ -38,9 +38,10 @@ Write notes to a **temp file outside the repo** (or pass inline to `gh`). Never 
 - Update `internal/version/version.go` (`const Version = "…"`) to match the tag, commit on `main`, push, then tag.
 - Collect **all commits since the previous release tag** on `main` (first release = entire `main` history).
 - Run `go test ./...` locally before tagging; stop if tests fail.
-- Tag only a commit on `main` (after version bump is pushed).
+- After pushing the version bump, confirm **CI is green on that commit** (`gh run list --commit <sha> --workflow CI`) before tagging.
+- Tag only a commit on `main` (the version-bump HEAD).
 - If branch ≠ `main`: stop (see workflow).
-- **Release CI** (on tag push) runs `go test` on the **tagged commit**; Docker image is published only if tests pass. No separate “check main CI” step required.
+- **Release workflow** (on tag push): Docker build + GHCR push only — tests are not repeated.
 - **No pre-releases**, **no draft releases** — publish immediately via `gh release create`.
 - Once the version is known: bump version, analyze commits, write notes, tag, `gh release create` — **no pause** for approval. Only stop if branch ≠ `main`, tests fail, CI failed, or `gh` is missing.
 - Pushing the tag starts `.github/workflows/release.yml` → image on `ghcr.io/tikhomirovv/easyterms`.

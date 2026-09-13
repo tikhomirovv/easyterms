@@ -1,4 +1,4 @@
-# CI gate: tests and Docker image build on every push/PR to main.
+# CI gate: tests on every push/PR to main. Docker build runs only on release tags.
 name: CI
 
 on:
@@ -26,13 +26,3 @@ jobs:
 
       - name: Run tests
         run: go test ./...
-
-  docker:
-    name: docker build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Build image
-        run: docker build -t easyterms:ci .

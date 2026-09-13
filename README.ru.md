@@ -11,7 +11,7 @@ Self-hosted Telegram-бот: помогает **понять пользоват�
 - Go 1.23+, **SQLite** (встроенная БД, без отдельного сервера)
 - [go-telegram/bot](https://github.com/go-telegram/bot)
 - LLM через **OpenAI-compatible HTTP API** (OpenAI, OpenRouter, LM Studio, …)
-- CI: `go test` + Docker на GitHub Actions
+- CI: `go test` при каждом merge; Docker-образ — на тегах релиза
 
 Подробнее: [`.docs/`](.docs/).
 

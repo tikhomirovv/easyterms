@@ -11,7 +11,7 @@ Self-hosted Telegram bot that helps you **understand terms of service** (Terms, 
 - Go 1.23+, **SQLite** (embedded, no separate DB server)
 - [go-telegram/bot](https://github.com/go-telegram/bot)
 - LLM via **OpenAI-compatible HTTP API** (OpenAI, OpenRouter, LM Studio, …)
-- CI: `go test` + Docker build on GitHub Actions
+- CI: `go test` on every merge; Docker image on release tags
 
 More context: [`.docs/`](.docs/).
 

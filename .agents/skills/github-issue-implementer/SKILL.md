@@ -36,7 +36,7 @@ Track progress with this checklist:
 - [ ] Acceptance criteria implemented
 - [ ] Tests added/updated (same change set)
 - [ ] `go test ./...` passes locally **or** CI checks green after push
-- [ ] `docker build` passes locally **or** CI docker job green after push
+- [ ] `docker build` passes locally when Dockerfile changed (release pipeline builds on tag)
 - [ ] Key stages commented on the issue (see below)
 - [ ] User notified (done or paused)
 - [ ] Pull request opened (when implementation is complete)
@@ -128,7 +128,7 @@ Do not close the issue manually — let the PR (`Closes #N`) close it on merge.
 Before notifying the user or opening a PR:
 
 1. Run tests locally **if Go is available**: `go test ./...` (or the project's documented test command).
-2. If local Go/Docker are **not** available, rely on **GitHub Actions** after push — CI runs `go test ./...` and `docker build`; wait for checks and report status.
+2. If local Go is **not** available, rely on **GitHub Actions** after push — CI runs `go test ./...`; wait for checks and report status.
 3. Fix failures before proceeding (locally or via follow-up commits until CI is green).
 4. Review the diff against acceptance criteria — every criterion met or explicitly deferred with user approval.
 
