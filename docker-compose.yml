@@ -2,7 +2,7 @@
 #
 # Quick start:
 #   1. cp .env.example .env
-#   2. Fill TELEGRAM_BOT_TOKEN, LLM_API_KEY, ALLOWED_TELEGRAM_IDS (your Telegram user id)
+#   2. Fill TELEGRAM_BOT_TOKEN, LLM_API_KEY, ALLOWED_TELEGRAM_IDS; optional TELEGRAM_PROXY
 #   3. docker compose up -d
 #   4. docker compose logs -f
 #
@@ -13,6 +13,8 @@ services:
   easyterms:
     image: ghcr.io/tikhomirovv/easyterms:latest
     # build: .
+    # Variables from .env are injected into the container. To override one key,
+    # add an `environment:` block here (it wins over env_file for the same name).
     env_file:
       - path: .env
         required: false # create from .env.example before first run

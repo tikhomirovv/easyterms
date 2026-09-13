@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -12,8 +13,19 @@ import (
 )
 
 // Run starts the Telegram bot until ctx is cancelled.
-func Run(ctx context.Context, token string, app *App) error {
-	tb, err := bot.New(token, bot.WithDefaultHandler(app.wrap(app.handleDefault)))
+// proxyURL is optional (TELEGRAM_PROXY): http(s):// or socks5/socks5h://.
+func Run(ctx context.Context, token string, proxyURL string, app *App) error {
+	opts := []bot.Option{bot.WithDefaultHandler(app.wrap(app.handleDefault))}
+	if strings.TrimSpace(proxyURL) != "" {
+		client, err := NewBotHTTPClient(proxyURL)
+		if err != nil {
+			return fmt.Errorf("telegram bot: %w", err)
+		}
+		opts = append(opts, bot.WithHTTPClient(TelegramPollTimeout, client))
+		app.log.Info("telegram proxy enabled", slog.String("proxy", RedactProxyURL(proxyURL)))
+	}
+
+	tb, err := bot.New(token, opts...)
 	if err != nil {
 		return fmt.Errorf("telegram bot: %w", err)
 	}

@@ -81,5 +81,5 @@ func run(ctx context.Context) error {
 		slog.String("log_level", cfg.LogLevel),
 		slog.String("database_path", cfg.DatabasePath),
 	)
-	return telegram.Run(ctx, cfg.TelegramBotToken, app)
+	return telegram.Run(ctx, cfg.TelegramBotToken, cfg.TelegramProxy, app)
 }

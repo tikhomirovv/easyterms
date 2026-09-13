@@ -42,6 +42,7 @@ go run ./cmd/migrate -direction up
 | `LOG_LEVEL` | `debug` / `info` / `warn` / `error` (по умолчанию `info`) |
 | `DATABASE_PATH` | Путь к файлу SQLite (по умолчанию `data/easyterms.db`) |
 | `TELEGRAM_BOT_TOKEN` | Токен от [@BotFather](https://t.me/BotFather) |
+| `TELEGRAM_PROXY` | Опционально: прокси для Bot API (`http://`, `socks5h://` и т.д.); пусто = напрямую |
 | `ALLOWED_TELEGRAM_IDS` | Telegram ID через запятую; **пусто = публичный бот** (warning в логах) |
 | `LLM_BASE_URL` | URL API |
 | `LLM_API_KEY` | Ключ API |

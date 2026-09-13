@@ -42,6 +42,7 @@ go run ./cmd/migrate -direction up
 | `LOG_LEVEL` | `debug` / `info` / `warn` / `error` (default `info`) |
 | `DATABASE_PATH` | SQLite file path (default `data/easyterms.db`) |
 | `TELEGRAM_BOT_TOKEN` | Bot token from [@BotFather](https://t.me/BotFather) |
+| `TELEGRAM_PROXY` | Optional proxy for Bot API (`http://`, `https://`, `socks5://`, `socks5h://`); empty = direct |
 | `ALLOWED_TELEGRAM_IDS` | Comma-separated Telegram user IDs; **empty = public bot** (warns at startup) |
 | `LLM_BASE_URL` | API base URL, e.g. `https://api.openai.com/v1` or OpenRouter / LM Studio |
 | `LLM_API_KEY` | API key (placeholder OK for local servers) |

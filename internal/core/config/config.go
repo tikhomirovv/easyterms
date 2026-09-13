@@ -18,6 +18,7 @@ const DefaultDatabasePath = "data/easyterms.db"
 type Config struct {
 	LogLevel           string
 	TelegramBotToken   string
+	TelegramProxy      string
 	DatabasePath       string
 	AllowedTelegramIDs []int64
 }
@@ -30,6 +31,7 @@ func Load() (Config, error) {
 	cfg := Config{
 		LogLevel:         envOrDefault("LOG_LEVEL", "info"),
 		TelegramBotToken: os.Getenv("TELEGRAM_BOT_TOKEN"),
+		TelegramProxy:    strings.TrimSpace(os.Getenv("TELEGRAM_PROXY")),
 		DatabasePath:     envOrDefault("DATABASE_PATH", DefaultDatabasePath),
 	}
 	ids, err := parseTelegramIDs(os.Getenv("ALLOWED_TELEGRAM_IDS"))
